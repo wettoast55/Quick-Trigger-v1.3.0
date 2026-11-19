@@ -11,9 +11,22 @@ Extract the ZIP and open **QuickTrigger.exe**. Requires 64-bit Windows and .NET 
 3. Choose an area with **Select area** or **Center**. Exact coordinates are on **Advanced**.
 4. Enter a six-digit hex color, use **Choose**, or hover over a pixel and press **F8**.
 5. Set **Cooldown (ms)** and **Scan interval (ms)**. Both accept **1**.
-6. Press **F6** to start. Press **F7** to stop immediately.
+6. For button-controlled operation, enable **Hold to scan** and click the **Hold button** control to choose a key or mouse button.
+7. Press **F6** to start or arm. Press **F7** to stop immediately.
 
 The app starts paused, with clicking off. Move or minimize Quick Trigger if it covers the scan area. Editing a setting pauses the current run.
+
+## Hold to scan
+
+Enable **Hold to scan** on Setup. The default binding is **Mouse 4 (Back)**. Click the button below **Hold button** to change it: release all buttons, hold your chosen key or mouse button, then release it to finish. Esc cancels without changing the old binding.
+
+Press **Arm / F6** once. The status shows **Waiting for hold** until you hold the chosen button. While held, the scanner looks for your configured color and can trigger according to the usual settings. Releasing the button pauses capture, clears the preview and matching-pixel count, and discards any partial matching streak. Another hold starts fresh; the cooldown between triggers is still preserved. F6 disarms and F7 stops, even while the button remains held. Rebinding or changing settings also disarms the app.
+
+Turn **Hold to scan** off to restore continuous scanning after F6. Hold mode is a press-and-hold action, not a press-once latch. The activation button is not swallowed; the foreground application can still receive its normal action.
+
+Keyboard keys and the five standard mouse buttons are supported, including both side buttons and separate left/right modifiers. **Esc and F6-F9 are reserved.** The left mouse button is available for detection-only mode; when **Click on trigger** is enabled, choose another hold button because generated clicks use the left button. Mouse-wheel scrolling has no held state. Extra vendor-specific buttons need to be mapped to a normal keyboard key or supported mouse button using the device's software. Bind one button, not a combination.
+
+Between scans, hold state is checked every **5 requested milliseconds**, even with a long scan interval. Shorter scan intervals remain available. Capture in progress cannot be interrupted, so the app rechecks the hold after capture and immediately before a trigger; a released hold discards that frame. Actual response time depends on Windows scheduling and capture time. The interface updates about ten times a second.
 
 ## Green scan-area outline
 
@@ -53,11 +66,13 @@ See `test-results.txt` for measured timer-only waits from the included validatio
 
 | Item | Purpose |
 | --- | --- |
-| Setup | Display, color, timing, repeat/click options and live preview |
+| Setup | Display, color, timing, hold/repeat/click options and live preview |
+| Hold to scan | Enable the selected key or mouse button as a hold requirement |
+| Hold button | Choose the activation binding; changes pause the run |
 | Show area | Show the green scan-area outline for three seconds |
 | Advanced | Physical coordinates, area size, minimum pixels and stable frames |
 | Events | Latest 100 trigger records |
-| F6 | Start or stop |
+| F6 | Start/stop continuous mode, or arm/disarm hold mode |
 | F7 | Stop, including during a long scheduled wait |
 | F8 | Sample the pixel under the pointer and pause |
 | F9 | Bind the active window, select its monitor, center the area and pause |
@@ -78,7 +93,7 @@ The detector counts matching pixels throughout the area. Each red, green and blu
 - `click_sent`: Windows accepted the input pair. This does not prove the target application accepted it.
 - `input_failed`: Windows rejected the input pair and monitoring stopped.
 
-Exports include UTC time, matching-pixel count/fraction, capture duration, observed presence duration, region, color and timing settings. Presence duration begins at the first eligible matching scan, not at the game's first rendered frame. It is not an end-to-end reaction-time measurement.
+Exports include UTC time, matching-pixel count/fraction, capture duration, observed presence duration, region, color, timing settings, hold-mode state and the binding's Windows virtual-key code. Presence duration begins at the first eligible matching scan, not at the game's first rendered frame. It is not an end-to-end reaction-time measurement.
 
 Windowed or borderless test builds work best with desktop capture. Occlusion, exclusive fullscreen, protected content, HDR conversion and input filtering can affect results. This app uses ordinary Windows capture/input APIs and has no anti-cheat integration or bypass.
 
@@ -90,6 +105,8 @@ Run **build.cmd** to rebuild with the .NET Framework compiler. Run **test.cmd** 
 | --- | --- |
 | `Detection.cs` | Settings, pixel matching, trigger rules and CSV records |
 | `ScanWorker.cs` | Background capture and sequential trigger processing |
+| `Activation.cs` | Binding names/validation, hold gating and scan deadlines |
+| `BindingForm.cs` | Choose one held keyboard key or mouse button |
 | `ScanTimer.cs` | Short, cancellable Windows timer waits |
 | `WindowsApi.cs` | Documented Windows interop calls |
 | `MainForm.cs` | Controls, hotkeys, preview updates and export |
@@ -103,4 +120,4 @@ Run **build.cmd** to rebuild with the .NET Framework compiler. Run **test.cmd** 
 
 Comments explain each class, method and non-obvious block. Names describe their purpose. No external packages, obfuscation, network calls, game hooks or drivers are used.
 
-Windows API references: [CreateWaitableTimerEx](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createwaitabletimerexw), [SetWaitableTimer](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-setwaitabletimer), [SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput), [CopyFromScreen](https://learn.microsoft.com/en-us/dotnet/api/system.drawing.graphics.copyfromscreen).
+Windows API references: [CreateWaitableTimerEx](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createwaitabletimerexw), [SetWaitableTimer](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-setwaitabletimer), [SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput), [CopyFromScreen](https://learn.microsoft.com/en-us/dotnet/api/system.drawing.graphics.copyfromscreen), [GetAsyncKeyState](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getasynckeystate), [Virtual-key codes](https://learn.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes).

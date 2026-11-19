@@ -17,6 +17,8 @@ namespace QuickTrigger
         public int ScanIntervalMs = 33;
         public bool Repeat;
         public bool SendClicks;
+        public bool HoldToScan;
+        public int HoldKey = ActivationKey.Default;
         public IntPtr TargetWindow;
         public uint TargetProcess;
         public IntPtr MainWindow;
@@ -26,6 +28,12 @@ namespace QuickTrigger
         // Timing accepts every positive 32-bit integer; there are no custom caps.
         public string Validate()
         {
+            if (HoldToScan)
+            {
+                string bindingError = ActivationKey.Validate(HoldKey, SendClicks);
+                if (bindingError != null)
+                    return bindingError;
+            }
             if (CooldownMs < 1 || ScanIntervalMs < 1)
                 return "Cooldown and scan interval must be at least 1 ms.";
             if (Region.Width < 1 || Region.Height < 1 || Region.Width > 1024 || Region.Height > 1024)
@@ -164,7 +172,7 @@ namespace QuickTrigger
         public double PresenceMs;
         public ScanSettings Settings;
 
-        public const string CsvHeader = "timestamp_utc,action,matching_pixels,matching_fraction,scan_ms,eligible_presence_ms,left,top,width,height,color_hex,tolerance,min_pixels,stable_frames,cooldown_ms,requested_interval_ms,repeat";
+        public const string CsvHeader = "timestamp_utc,action,matching_pixels,matching_fraction,scan_ms,eligible_presence_ms,left,top,width,height,color_hex,tolerance,min_pixels,stable_frames,cooldown_ms,requested_interval_ms,repeat,hold_to_scan,hold_key_code";
 
         // Invariant formatting prevents decimal commas from breaking the CSV columns.
         public string ToCsv()
@@ -172,11 +180,12 @@ namespace QuickTrigger
             Rectangle area = Settings.Region;
             double fraction = MatchingPixels / (double)(area.Width * area.Height);
             return string.Format(CultureInfo.InvariantCulture,
-                "{0:o},{1},{2},{3:F6},{4:F3},{5:F3},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16}",
+                "{0:o},{1},{2},{3:F6},{4:F3},{5:F3},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18}",
                 TimestampUtc, Action, MatchingPixels, fraction, ScanMs, PresenceMs,
                 area.X, area.Y, area.Width, area.Height, PixelDetector.ToHex(Settings.TargetColor),
                 Settings.ColorTolerance, Settings.MinimumPixels, Settings.StableFrames,
-                Settings.CooldownMs, Settings.ScanIntervalMs, Settings.Repeat ? "true" : "false");
+                Settings.CooldownMs, Settings.ScanIntervalMs, Settings.Repeat ? "true" : "false",
+                Settings.HoldToScan ? "true" : "false", Settings.HoldKey);
         }
     }
 }

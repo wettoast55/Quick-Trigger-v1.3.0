@@ -19,15 +19,17 @@ namespace QuickTrigger
         private NumericUpDown toleranceInput, minimumInput, stableInput, cooldownInput, intervalInput;
         private TextBox colorInput;
         private ComboBox displayInput;
-        private CheckBox clickInput, repeatInput;
+        private CheckBox clickInput, repeatInput, holdInput;
         private Label regionLabel, targetLabel, statusLabel, metricsLabel, messageLabel, eventCountLabel;
-        private Button startButton, colorButton;
+        private Button startButton, colorButton, bindingButton;
         private TabControl tabs;
         private ListView eventList;
         private FramePreview preview;
         private ScanWorker worker;
         private DemoForm demo;
         private AreaOverlay areaOverlay;
+        private BindingForm bindingDialog;
+        private int holdKey = ActivationKey.Default;
         private IntPtr targetWindow;
         private uint targetProcess;
         private bool monitoring;
@@ -167,9 +169,10 @@ namespace QuickTrigger
             TableLayoutPanel live = new TableLayoutPanel();
             live.Dock = DockStyle.Fill;
             live.ColumnCount = 1;
-            live.RowCount = 4;
+            live.RowCount = 5;
             live.Padding = new Padding(10, 0, 0, 0);
             live.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            live.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
             live.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             live.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
             live.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
@@ -184,10 +187,21 @@ namespace QuickTrigger
             metricsLabel = Ui.Label("0 matching pixels  |  0 triggers\nActual: -- scans/s  |  Capture: -- ms", 340, 70);
             metricsLabel.Dock = DockStyle.Fill;
             metricsLabel.Padding = new Padding(0, 10, 0, 0);
+            holdInput = new CheckBox();
+            holdInput.Name = "HoldToScan";
+            holdInput.AccessibleName = "Hold to scan";
+            holdInput.Text = "Hold to scan";
+            holdInput.AutoSize = true;
+            holdInput.CheckedChanged += OnHoldModeChanged;
+            bindingButton = Ui.Button(ActivationKey.Name(holdKey), ChooseHoldButton);
+            bindingButton.Name = "HoldBinding";
+            bindingButton.AccessibleName = "Choose hold button";
+            bindingButton.Enabled = false;
             live.Controls.Add(statusLabel, 0, 0);
-            live.Controls.Add(preview, 0, 1);
-            live.Controls.Add(metricsLabel, 0, 2);
-            live.Controls.Add(Ui.Buttons(Ui.Button("Test scene", OpenDemo), Ui.Button("Export CSV", ExportEvents)), 0, 3);
+            live.Controls.Add(Ui.Pair("Activation", holdInput, "Hold button", bindingButton), 0, 1);
+            live.Controls.Add(preview, 0, 2);
+            live.Controls.Add(metricsLabel, 0, 3);
+            live.Controls.Add(Ui.Buttons(Ui.Button("Test scene", OpenDemo), Ui.Button("Export CSV", ExportEvents)), 0, 4);
             return page;
         }
 
@@ -359,6 +373,7 @@ namespace QuickTrigger
                 MinimumPixels = (int)minimumInput.Value, StableFrames = (int)stableInput.Value,
                 CooldownMs = (int)cooldownInput.Value, ScanIntervalMs = (int)intervalInput.Value,
                 Repeat = repeatInput.Checked, SendClicks = clickInput.Checked,
+                HoldToScan = holdInput.Checked, HoldKey = holdKey,
                 TargetWindow = targetWindow, TargetProcess = targetProcess, MainWindow = Handle,
                 DisplayDeviceName = SelectedDisplay.DeviceName, DisplayBounds = SelectedDisplay.Bounds
             };
@@ -417,6 +432,41 @@ namespace QuickTrigger
         {
             if (!settingInputs)
                 StopMonitoring();
+        }
+
+        // Enabling hold mode keeps the app paused until the user explicitly arms it.
+        private void OnHoldModeChanged(object sender, EventArgs e)
+        {
+            StopMonitoring();
+            bindingButton.Enabled = holdInput.Checked;
+            if (holdInput.Checked)
+                ShowMessage("Press F6 to arm, then hold " + ActivationKey.Name(holdKey) + " to scan.", false);
+            else
+                ShowMessage("Hold mode off. F6 starts continuous monitoring.", false);
+        }
+
+        // Rebinding always stops the session and keeps the old binding if cancelled.
+        private void ChooseHoldButton(object sender, EventArgs e)
+        {
+            StopMonitoring();
+            CloseAreaOverlay();
+            using (BindingForm dialog = new BindingForm(clickInput.Checked))
+            {
+                bindingDialog = dialog;
+                try
+                {
+                    if (dialog.ShowDialog(this) == DialogResult.OK)
+                    {
+                        holdKey = dialog.SelectedKey;
+                        bindingButton.Text = ActivationKey.Name(holdKey);
+                        ShowMessage("Press F6 to arm, then hold " + ActivationKey.Name(holdKey) + " to scan.", false);
+                    }
+                }
+                finally
+                {
+                    bindingDialog = null;
+                }
+            }
         }
 
         // A manual area edit also disables automatic following of the demo window.
@@ -648,8 +698,8 @@ namespace QuickTrigger
             }
             worker = new ScanWorker(settings);
             monitoring = true;
-            startButton.Text = "Stop   F6";
-            statusLabel.Text = settings.SendClicks ? "Click mode" : "Detection only";
+            startButton.Text = settings.HoldToScan ? "Disarm   F6" : "Stop   F6";
+            statusLabel.Text = settings.HoldToScan ? "Waiting for hold" : (settings.SendClicks ? "Click mode" : "Detection only");
             worker.Start();
         }
 
@@ -661,7 +711,7 @@ namespace QuickTrigger
                 worker.RequestStop();
             if (startButton == null || statusLabel == null)
                 return;
-            startButton.Text = "Start   F6";
+            startButton.Text = holdInput != null && holdInput.Checked ? "Arm   F6" : "Start   F6";
             statusLabel.Text = "Paused";
         }
 
@@ -679,7 +729,7 @@ namespace QuickTrigger
                 worker.Dispose();
                 worker = null;
                 monitoring = false;
-                startButton.Text = "Start   F6";
+                startButton.Text = holdInput.Checked ? "Arm   F6" : "Start   F6";
                 statusLabel.Text = finalUpdate.Status.Error ? "Stopped: error" : "Paused";
             }
         }
@@ -687,6 +737,8 @@ namespace QuickTrigger
         // Retain a bounded event history while displaying only the latest hundred entries.
         private void ConsumeUpdate(ScanUpdate update)
         {
+            if (update.ClearPreview)
+                preview.SetFrame(null);
             if (update.Preview != null)
                 preview.SetFrame(update.Preview);
             foreach (TriggerEvent entry in update.Events)
@@ -703,7 +755,7 @@ namespace QuickTrigger
                 status.HighResolution ? "high resolution" : "standard");
             if (monitoring)
             {
-                statusLabel.Text = status.Matched ? "Color matched" : "Monitoring";
+                statusLabel.Text = status.WaitingForHold ? "Waiting for hold" : (status.Matched ? "Color matched" : "Monitoring");
                 ShowMessage(status.Message, status.Error);
             }
             if (status.Error)
@@ -795,6 +847,16 @@ namespace QuickTrigger
                 BeginInvoke(new Action(OnDisplayLayoutChanged));
             if (message.Msg == 0x0312)
             {
+                // Do not start scans, sample or bind a target while choosing an activation key.
+                if (bindingDialog != null)
+                {
+                    if (message.WParam.ToInt32() == 7)
+                    {
+                        StopMonitoring();
+                        bindingDialog.CancelBinding();
+                    }
+                    return;
+                }
                 switch (message.WParam.ToInt32())
                 {
                     case 6: ToggleMonitoring(this, EventArgs.Empty); break;

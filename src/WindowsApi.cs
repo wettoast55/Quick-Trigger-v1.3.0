@@ -122,7 +122,13 @@ namespace QuickTrigger
         // The worker polls F7 too, so stopping does not depend on a UI refresh.
         public static bool StopKeyPressed()
         {
-            return (GetAsyncKeyState(0x76) & 0x8000) != 0;
+            return KeyIsDown(0x76);
+        }
+
+        // Ignore the unreliable "pressed since last call" bit; only a current hold is active.
+        public static bool KeyIsDown(int key)
+        {
+            return (GetAsyncKeyState(key) & 0x8000) != 0;
         }
 
         // Focus, client bounds and process identity must still match at click time.
@@ -138,7 +144,7 @@ namespace QuickTrigger
                 return "Waiting for the bound window to be active.";
             if (!ClientBounds(target).Contains(pointer) || GetAncestor(WindowFromPoint(pointer), 2) != target)
                 return "Move the pointer inside the bound window.";
-            if ((GetAsyncKeyState(0x01) & 0x8000) != 0)
+            if (KeyIsDown(0x01))
                 return "Release the left mouse button.";
             return null;
         }

@@ -39,6 +39,8 @@ namespace QuickTrigger
                 TestPixels();
                 TestTriggerRules();
                 TestSettings();
+                TestHoldControl();
+                TestHoldWorker();
                 TestCsv();
                 TestTimer();
                 TestDisplayGeometry();
@@ -154,6 +156,150 @@ namespace QuickTrigger
             settings.CooldownMs = 1;
             settings.MinimumPixels = 14401;
             Check("Minimum pixels cannot exceed area", settings.Validate() != null);
+            settings.MinimumPixels = 8;
+            settings.HoldToScan = true;
+            foreach (Keys key in new Keys[] { Keys.A, Keys.Tab, Keys.LShiftKey, Keys.RControlKey, Keys.LMenu,
+                Keys.LButton, Keys.RButton, Keys.MButton, Keys.XButton1, Keys.XButton2 })
+            {
+                settings.HoldKey = (int)key;
+                Check("Hold binding accepts " + ActivationKey.Name(settings.HoldKey), settings.Validate() == null);
+            }
+            foreach (Keys key in new Keys[] { Keys.Escape, Keys.F6, Keys.F7, Keys.F8, Keys.F9, Keys.None })
+            {
+                settings.HoldKey = (int)key;
+                Check("Hold binding rejects reserved or missing key " + key, settings.Validate() != null);
+            }
+            settings.HoldKey = 7;
+            Check("Hold binding rejects an undefined virtual key", settings.Validate() != null);
+            settings.HoldKey = (int)Keys.LButton;
+            settings.SendClicks = true;
+            Check("Left mouse hold cannot conflict with generated left clicks", settings.Validate() != null);
+            settings.HoldKey = (int)Keys.XButton1;
+            Check("Side mouse hold works with click mode settings", settings.Validate() == null);
+            settings.HoldToScan = false;
+            settings.HoldKey = 0;
+            Check("An unused binding does not block continuous mode", settings.Validate() == null);
+        }
+
+        // Fake time and held-button state make release, cooldown and deadline boundaries exact.
+        private static void TestHoldControl()
+        {
+            bool held = false;
+            ScanSettings settings = new ScanSettings {
+                HoldToScan = true, HoldKey = (int)Keys.XButton1,
+                StableFrames = 2, CooldownMs = 100, ScanIntervalMs = int.MaxValue
+            };
+            ScanControl control = new ScanControl(settings, delegate(int key) { return held && key == settings.HoldKey; });
+            double presence;
+            Check("Released hold never schedules a scan", !control.IsScanDue(0) && control.WaitingForHold);
+            Check("Released hold cannot trigger even with a matching frame", !control.TryTrigger(true, 0, out presence));
+            held = true;
+            Check("Pressing the hold button permits the first scan", control.IsScanDue(10));
+            control.ScheduleNextScan(10);
+            Check("Holding does not bypass a long scan interval", !control.IsScanDue(11));
+            Check("Long intervals still poll release within five requested milliseconds", control.WaitMilliseconds(11) == 5);
+            Check("First held frame must stabilize", !control.TryTrigger(true, 10, out presence));
+            held = false;
+            Check("Release interrupts the interval", !control.IsScanDue(11));
+            held = true;
+            Check("Repress starts a fresh scan without waiting for the old deadline", control.IsScanDue(12));
+            Check("A released partial match cannot carry into the next hold", !control.TryTrigger(true, 12, out presence));
+            Check("Fresh consecutive matches qualify", control.TryTrigger(true, 13, out presence) && presence == 1);
+            held = false;
+            control.IsActive();
+            held = true;
+            control.TryTrigger(true, 14, out presence);
+            Check("Repress cannot bypass the existing cooldown", !control.TryTrigger(true, 15, out presence));
+            Check("A new hold can trigger when the preserved cooldown expires", control.TryTrigger(true, 113, out presence));
+            Check("The same held presence still fires only once", !control.TryTrigger(true, 300, out presence));
+            held = false;
+            Check("Releasing before submission blocks a qualified frame", !control.IsActive());
+            settings.ScanIntervalMs = 1;
+            held = true;
+            control.IsScanDue(400);
+            control.ScheduleNextScan(400);
+            Check("Hold polling preserves sub-five-millisecond scan intervals", control.WaitMilliseconds(400.25) == 0.75);
+            Check("An overdue held scan does not wait an extra polling interval", control.WaitMilliseconds(402) == 0);
+
+            // Continuous mode must not query or depend on the configured hold button.
+            settings.HoldToScan = false;
+            settings.StableFrames = 1;
+            ScanControl continuous = new ScanControl(settings, delegate(int key) { throw new InvalidOperationException("Unexpected hold query."); });
+            Check("Continuous mode scans without a held key", continuous.IsScanDue(0));
+            Check("Continuous mode still produces trigger events", continuous.TryTrigger(true, 0, out presence));
+        }
+
+        // Exercise the actual worker using synthetic pixels; no desktop is read and no input is sent.
+        private static void TestHoldWorker()
+        {
+            ScanSettings settings = new ScanSettings {
+                Region = new Rectangle(Screen.PrimaryScreen.Bounds.Location, new Size(16, 16)),
+                TargetColor = Color.Gold, HoldToScan = true, HoldKey = (int)Keys.XButton1,
+                StableFrames = 1, MinimumPixels = 1, CooldownMs = 1, ScanIntervalMs = int.MaxValue
+            };
+            int held = 0;
+            int captures = 0;
+            Func<int, bool> keyDown = delegate(int key) {
+                return key == settings.HoldKey && Interlocked.CompareExchange(ref held, 0, 0) != 0;
+            };
+            using (ScanWorker worker = new ScanWorker(settings, keyDown, delegate(Graphics graphics) {
+                graphics.Clear(settings.TargetColor);
+                Interlocked.Increment(ref captures);
+            }))
+            {
+                worker.Start();
+                ScanUpdate idle = WaitForStatus(worker, delegate(ScanStatus status) { return status.WaitingForHold; });
+                Thread.Sleep(30);
+                Check("Armed worker captures nothing while the button is released", Interlocked.CompareExchange(ref captures, 0, 0) == 0);
+                Check("Idle worker has no triggers and clears the preview", idle.Status.Triggers == 0 && idle.ClearPreview);
+                Interlocked.Exchange(ref held, 1);
+                WaitForStatus(worker, delegate(ScanStatus status) { return status.Triggers == 1; });
+                Thread.Sleep(30);
+                Check("Held worker honors the requested long scan interval", Interlocked.CompareExchange(ref captures, 0, 0) == 1);
+                Interlocked.Exchange(ref held, 0);
+                idle = WaitForStatus(worker, delegate(ScanStatus status) { return status.WaitingForHold; });
+                Check("Release clears match metrics and stale preview", idle.Status.MatchingPixels == 0 && idle.Status.ScansPerSecond == 0 && idle.ClearPreview);
+                Interlocked.Exchange(ref held, 1);
+                WaitForStatus(worker, delegate(ScanStatus status) { return status.Triggers == 2; });
+                Check("Repress resumes the real worker before its old long deadline", Interlocked.CompareExchange(ref captures, 0, 0) == 2);
+                worker.RequestStop();
+                Stopwatch stopTime = Stopwatch.StartNew();
+                while (!worker.IsFinished && stopTime.ElapsedMilliseconds < 2000)
+                    Thread.Sleep(1);
+                Check("Disarming interrupts a held worker's long interval", worker.IsFinished);
+            }
+
+            // Release in the capture callback to reproduce a button-up during an in-flight frame.
+            held = 1;
+            captures = 0;
+            using (ScanWorker worker = new ScanWorker(settings, keyDown, delegate(Graphics graphics) {
+                graphics.Clear(settings.TargetColor);
+                Interlocked.Increment(ref captures);
+                Interlocked.Exchange(ref held, 0);
+            }))
+            {
+                worker.Start();
+                ScanUpdate idle = WaitForStatus(worker, delegate(ScanStatus status) { return status.WaitingForHold; });
+                Check("Releasing during capture discards the matching frame", captures == 1 && idle.Status.Triggers == 0 && idle.Events.Length == 0);
+            }
+        }
+
+        // Bound each asynchronous check and dispose the preview copies the test consumes.
+        private static ScanUpdate WaitForStatus(ScanWorker worker, Func<ScanStatus, bool> condition)
+        {
+            Stopwatch clock = Stopwatch.StartNew();
+            while (clock.ElapsedMilliseconds < 2000)
+            {
+                ScanUpdate update = worker.ReadUpdate();
+                if (update.Preview != null)
+                    update.Preview.Dispose();
+                if (update.Status.Error)
+                    throw new InvalidOperationException(update.Status.Message);
+                if (condition(update.Status))
+                    return update;
+                Thread.Sleep(1);
+            }
+            throw new InvalidOperationException("Timed out waiting for the synthetic scan worker.");
         }
 
         // Export formatting must stay valid on computers that use a decimal comma.
@@ -178,7 +324,10 @@ namespace QuickTrigger
                 Check("CSV columns match the header", csv.Split(',').Length == TriggerEvent.CsvHeader.Split(',').Length);
                 Check("CSV uses decimal points in every locale", csv.Contains("0.125000,1.250,33.500"));
                 Check("CSV preserves UTC and negative coordinates", csv.Contains("Z,would_fire") && csv.Contains(",-120,0,120,120,#FFD54A,"));
-                Check("CSV retains the requested 1 ms values", csv.EndsWith(",1,1,false"));
+                Check("CSV retains the requested 1 ms values", csv.EndsWith(",1,1,false,false,5"));
+                entry.Settings.HoldToScan = true;
+                entry.Settings.HoldKey = (int)Keys.RButton;
+                Check("CSV records hold mode and the selected button", entry.ToCsv().EndsWith(",false,true,2"));
             }
             finally
             {
@@ -225,6 +374,13 @@ namespace QuickTrigger
                 Check("UI accepts 1 ms for both settings", cooldown.Value == 1 && interval.Value == 1);
                 Check("UI timing fields have no former upper caps", cooldown.Maximum == int.MaxValue && interval.Maximum == int.MaxValue);
                 Check("Main window is named Quick Trigger", form.Text == "Quick Trigger");
+                CheckBox hold = (CheckBox)form.Controls.Find("HoldToScan", true)[0];
+                Button binding = (Button)form.Controls.Find("HoldBinding", true)[0];
+                Check("Hold mode starts disabled and retains the default mouse side button", !hold.Checked && !binding.Enabled && binding.Text == "Mouse 4 (Back)");
+                hold.Checked = true;
+                Check("Enabling hold mode exposes the binding control", binding.Enabled);
+                hold.Checked = false;
+                Check("Disabling hold mode preserves its selected binding", !binding.Enabled && binding.Text == "Mouse 4 (Back)");
                 ComboBox display = (ComboBox)form.Controls.Find("DisplaySelector", true)[0];
                 Check("Display selector lists every connected display", display.Items.Count == Screen.AllScreens.Length);
                 Check("Display selector starts on the primary monitor", ((DisplayChoice)display.SelectedItem).IsPrimary);
