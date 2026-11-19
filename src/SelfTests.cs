@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace HexBot
+namespace QuickTrigger
 {
     // Tests use synthetic pixels and timing inputs. They never submit mouse input.
     internal static class SelfTests
@@ -41,6 +41,8 @@ namespace HexBot
                 TestSettings();
                 TestCsv();
                 TestTimer();
+                TestDisplayGeometry();
+                TestAreaOverlay();
                 TestInterface();
                 Check("Windows input structure has the correct size",
                     Marshal.SizeOf(typeof(WindowsApi.MouseInputEvent)) == (IntPtr.Size == 8 ? 40 : 28));
@@ -222,7 +224,78 @@ namespace HexBot
                 interval.Value = 1;
                 Check("UI accepts 1 ms for both settings", cooldown.Value == 1 && interval.Value == 1);
                 Check("UI timing fields have no former upper caps", cooldown.Maximum == int.MaxValue && interval.Maximum == int.MaxValue);
-                Check("Main window is named HexBot", form.Text == "HexBot");
+                Check("Main window is named Quick Trigger", form.Text == "Quick Trigger");
+                ComboBox display = (ComboBox)form.Controls.Find("DisplaySelector", true)[0];
+                Check("Display selector lists every connected display", display.Items.Count == Screen.AllScreens.Length);
+                Check("Display selector starts on the primary monitor", ((DisplayChoice)display.SelectedItem).IsPrimary);
+                Check("Display selector requires a listed choice", display.DropDownStyle == ComboBoxStyle.DropDownList);
+                if (display.Items.Count > 1)
+                {
+                    display.SelectedIndex = (display.SelectedIndex + 1) % display.Items.Count;
+                    DisplayChoice chosen = (DisplayChoice)display.SelectedItem;
+                    NumericUpDown left = (NumericUpDown)form.Controls.Find("Left", true)[0];
+                    NumericUpDown top = (NumericUpDown)form.Controls.Find("Top", true)[0];
+                    Rectangle expected = DisplayLayout.Centered(chosen.Bounds, 120, 120);
+                    Check("Changing the selected display updates physical coordinates", left.Value == expected.Left && top.Value == expected.Top);
+                }
+            }
+        }
+
+        // Synthetic layouts cover negative origins, uneven alignment and edge clipping.
+        private static void TestDisplayGeometry()
+        {
+            Rectangle leftDisplay = new Rectangle(-1920, 0, 1920, 1080);
+            Rectangle upperRightDisplay = new Rectangle(1920, -240, 2560, 1440);
+            Check("Area centers correctly on a left-hand monitor",
+                DisplayLayout.Centered(leftDisplay, 120, 120) == new Rectangle(-1020, 480, 120, 120));
+            Check("Area centers correctly on an offset monitor",
+                DisplayLayout.Centered(upperRightDisplay, 120, 120) == new Rectangle(3140, 420, 120, 120));
+            Check("An area cannot cross the selected display's right edge",
+                DisplayLayout.Fit(new Rectangle(-50, 200, 120, 120), leftDisplay) == new Rectangle(-120, 200, 120, 120));
+            Check("An area outside the left edge moves onto its display",
+                DisplayLayout.Fit(new Rectangle(-5000, -200, 120, 120), leftDisplay) == new Rectangle(-1920, 0, 120, 120));
+            Check("A small display reduces an oversized area",
+                DisplayLayout.Centered(new Rectangle(0, 0, 800, 600), 1024, 1024) == new Rectangle(0, 0, 800, 600));
+            Check("A valid region keeps its position",
+                DisplayLayout.Fit(new Rectangle(-1500, 200, 120, 120), leftDisplay) == new Rectangle(-1500, 200, 120, 120));
+            ScanSettings settings = new ScanSettings {
+                Region = new Rectangle(-1500, 200, 120, 120), DisplayDeviceName = "TestDisplay", DisplayBounds = leftDisplay
+            };
+            Check("Settings accept an area inside the selected display", settings.Validate() == null);
+            settings.Region = new Rectangle(-50, 200, 120, 120);
+            Check("Settings reject an area spanning two displays", settings.Validate() != null);
+            settings.Region = new Rectangle(200, 200, 120, 120);
+            Check("Settings reject an area wholly on another display", settings.Validate() != null);
+            DisplayChoice choice = new DisplayChoice("TestDisplay", leftDisplay, true);
+            Check("Display labels include resolution and primary status", choice.ToString().Contains("1920 x 1080") && choice.ToString().Contains("primary"));
+            Check("Unknown display identity is rejected", !DisplayChoice.StillConnected("Missing test display", leftDisplay));
+            using (RegionPicker picker = new RegionPicker(leftDisplay))
+                Check("Area picker is restricted to the selected monitor", picker.Bounds == leftDisplay);
+        }
+
+        // Verify fade boundaries and border geometry without showing a desktop overlay.
+        private static void TestAreaOverlay()
+        {
+            Check("Overlay starts bright", AreaOverlay.OpacityAt(0) == AreaOverlay.BrightOpacity);
+            Check("Overlay stays bright for two seconds", AreaOverlay.OpacityAt(2000) == AreaOverlay.BrightOpacity);
+            Check("Overlay is halfway faded at 2.5 seconds", Math.Abs(AreaOverlay.OpacityAt(2500) - AreaOverlay.BrightOpacity / 2) < 0.00001);
+            Check("Overlay remains visible just before three seconds", AreaOverlay.OpacityAt(2999) > 0);
+            Check("Overlay disappears at three seconds", AreaOverlay.OpacityAt(3000) == 0);
+            Check("Overlay remains gone after its lifetime", AreaOverlay.OpacityAt(5000) == 0);
+            using (Region border = AreaOverlay.BorderShape(new Size(120, 120)))
+            {
+                Check("Overlay border includes the outer corner", border.IsVisible(0, 0));
+                Check("Overlay border includes the far edge", border.IsVisible(119, 60));
+                Check("Overlay center is completely open", !border.IsVisible(60, 60));
+                Check("Overlay does not extend beyond the scan area", !border.IsVisible(120, 60));
+            }
+            using (Region border = AreaOverlay.BorderShape(new Size(1, 1)))
+                Check("A one-pixel scan area still has an indicator", border.IsVisible(0, 0));
+            using (AreaOverlay overlay = new AreaOverlay())
+            {
+                Check("Overlay uses bright green", overlay.BackColor == Color.Lime);
+                Check("Overlay has no taskbar entry", !overlay.ShowInTaskbar);
+                Check("Overlay preserves physical pixel coordinates", overlay.AutoScaleMode == AutoScaleMode.None);
             }
         }
     }

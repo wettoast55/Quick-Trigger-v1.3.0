@@ -3,13 +3,13 @@ using System.Reflection;
 using System.Windows.Forms;
 
 // Executable properties use the same name as the window and package.
-[assembly: AssemblyTitle("HexBot")]
-[assembly: AssemblyProduct("HexBot")]
+[assembly: AssemblyTitle("Quick Trigger")]
+[assembly: AssemblyProduct("Quick Trigger")]
 [assembly: AssemblyDescription("Screen-region color detection and input testing")]
-[assembly: AssemblyVersion("2.0.0.0")]
-[assembly: AssemblyFileVersion("2.0.0.0")]
+[assembly: AssemblyVersion("2.1.0.0")]
+[assembly: AssemblyFileVersion("2.1.0.0")]
 
-namespace HexBot
+namespace QuickTrigger
 {
     internal static class Program
     {

@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace HexBot
+namespace QuickTrigger
 {
     // Documented Windows calls live here so the rest of the app reads like ordinary C#.
     internal static class WindowsApi
@@ -32,6 +32,9 @@ namespace HexBot
         // DPI awareness keeps capture coordinates in physical screen pixels.
         [DllImport("user32.dll")] private static extern bool SetProcessDpiAwarenessContext(IntPtr context);
         [DllImport("user32.dll")] private static extern bool SetProcessDPIAware();
+
+        // Wait for this application's queued desktop drawing changes before capturing again.
+        [DllImport("dwmapi.dll")] private static extern int DwmFlush();
 
         // A waitable timer gives the background scanner short, cancellable waits.
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -72,6 +75,12 @@ namespace HexBot
             {
                 SetProcessDPIAware();
             }
+        }
+
+        // Clear the setup outline from the composed desktop before scans or color sampling.
+        public static bool FlushDesktopDrawing()
+        {
+            return DwmFlush() == 0;
         }
 
         // Reading the title does not require opening the target process.

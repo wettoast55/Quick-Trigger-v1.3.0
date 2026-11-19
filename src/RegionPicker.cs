@@ -2,9 +2,9 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace HexBot
+namespace QuickTrigger
 {
-    // A temporary overlay lets the user draw a rectangle across the desktop.
+        // A temporary overlay lets the user draw a rectangle on one selected display.
     internal sealed class RegionPicker : Form
     {
         private Point startPoint;
@@ -13,11 +13,12 @@ namespace HexBot
         public Rectangle SelectedRegion { get; private set; }
 
         // The overlay closes before any captured pixels are analyzed.
-        public RegionPicker()
+        public RegionPicker(Rectangle displayBounds)
         {
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
-            Bounds = SystemInformation.VirtualScreen;
+            AutoScaleMode = AutoScaleMode.None;
+            Bounds = displayBounds;
             BackColor = Color.Black;
             Opacity = 0.40;
             TopMost = true;
@@ -58,6 +59,9 @@ namespace HexBot
         // Normalize the corners so dragging in any direction works.
         private void UpdateSelection(Point pointer)
         {
+            // Mouse capture can report positions beyond this monitor; clamp the final rectangle.
+            pointer.X = Math.Max(0, Math.Min(ClientSize.Width, pointer.X));
+            pointer.Y = Math.Max(0, Math.Min(ClientSize.Height, pointer.Y));
             selection = Rectangle.FromLTRB(
                 Math.Min(startPoint.X, pointer.X), Math.Min(startPoint.Y, pointer.Y),
                 Math.Max(startPoint.X, pointer.X), Math.Max(startPoint.Y, pointer.Y));

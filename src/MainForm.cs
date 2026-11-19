@@ -7,7 +7,7 @@ using System.IO;
 using System.Text;
 using System.Windows.Forms;
 
-namespace HexBot
+namespace QuickTrigger
 {
     // This form handles controls and display only; ScanWorker owns the capture loop.
     internal sealed class MainForm : Form
@@ -18,6 +18,7 @@ namespace HexBot
         private NumericUpDown leftInput, topInput, widthInput, heightInput;
         private NumericUpDown toleranceInput, minimumInput, stableInput, cooldownInput, intervalInput;
         private TextBox colorInput;
+        private ComboBox displayInput;
         private CheckBox clickInput, repeatInput;
         private Label regionLabel, targetLabel, statusLabel, metricsLabel, messageLabel, eventCountLabel;
         private Button startButton, colorButton;
@@ -26,6 +27,7 @@ namespace HexBot
         private FramePreview preview;
         private ScanWorker worker;
         private DemoForm demo;
+        private AreaOverlay areaOverlay;
         private IntPtr targetWindow;
         private uint targetProcess;
         private bool monitoring;
@@ -38,16 +40,17 @@ namespace HexBot
         // The 100 ms timer refreshes the interface, never the detector.
         public MainForm()
         {
-            Text = "HexBot";
+            Text = "Quick Trigger";
             Font = new Font("Segoe UI", 9.5f);
             BackColor = Ui.Background;
             ForeColor = Ui.Text;
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(800, 560);
-            MinimumSize = new Size(790, 570);
+            ClientSize = new Size(800, 600);
+            MinimumSize = new Size(790, 610);
             StartPosition = FormStartPosition.CenterScreen;
             BuildInterface();
-            SetRegion(CenteredRegion(Screen.PrimaryScreen.Bounds, 120, 120));
+            RefreshDisplays(false);
+            SetRegion(DisplayLayout.Centered(SelectedDisplay.Bounds, 120, 120));
             Shown += RegisterHotkeys;
             refreshTimer.Interval = 100;
             refreshTimer.Tick += RefreshResults;
@@ -72,7 +75,7 @@ namespace HexBot
             header.ColumnCount = 2;
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 168));
-            Label title = Ui.Label("HexBot", 250, 42);
+            Label title = Ui.Label("Quick Trigger", 320, 42);
             title.Font = new Font("Segoe UI", 25, FontStyle.Bold);
             title.ForeColor = Ui.Text;
             startButton = Ui.Button("Start   F6", ToggleMonitoring);
@@ -112,8 +115,19 @@ namespace HexBot
 
             FlowLayoutPanel settings = VerticalPanel();
             layout.Controls.Add(settings, 0, 0);
+            settings.Controls.Add(Ui.Label("Display", 302, 22));
+            displayInput = new ComboBox();
+            displayInput.Name = "DisplaySelector";
+            displayInput.AccessibleName = "Display";
+            displayInput.DropDownStyle = ComboBoxStyle.DropDownList;
+            displayInput.Width = 302;
+            displayInput.DropDownWidth = 440;
+            displayInput.Margin = new Padding(0, 0, 0, 8);
+            displayInput.SelectedIndexChanged += OnDisplayChanged;
+            displayInput.DropDown += OnDisplayDropdown;
+            settings.Controls.Add(displayInput);
             settings.Controls.Add(Ui.Label("Scan area", 302, 22));
-            settings.Controls.Add(Ui.Buttons(Ui.Button("Select area", SelectRegion), Ui.Button("Center", CenterRegion)));
+            settings.Controls.Add(Ui.Buttons(Ui.Button("Select area", SelectRegion), Ui.Button("Center", CenterRegion), Ui.Button("Show area", ShowCurrentArea)));
             regionLabel = Ui.Label("", 302, 30);
             settings.Controls.Add(regionLabel);
 
@@ -196,7 +210,7 @@ namespace HexBot
             minimumInput.ValueChanged += OnSettingsChanged;
             stableInput.ValueChanged += OnSettingsChanged;
             fields.Controls.Add(Ui.Pair("Minimum pixels", minimumInput, "Stable frames", stableInput));
-            fields.Controls.Add(Ui.Label("Coordinates are physical screen pixels. Custom areas stay fixed if a window moves.\n\nStable frames means consecutive matching scans. Repeat mode fires again after the cooldown.\n\n1 ms is a requested interval. Capture, display refresh and Windows scheduling determine the actual rate. Changing settings pauses monitoring.", 630, 180));
+            fields.Controls.Add(Ui.Label("Coordinates are physical desktop pixels and must stay on the chosen display. The green outline lasts three seconds after adjustments.\n\nStable frames means consecutive matching scans. Repeat mode fires again after the cooldown.\n\n1 ms is a requested interval. Capture, display refresh and Windows scheduling determine the actual rate. Changing settings pauses monitoring.", 630, 180));
             return page;
         }
 
@@ -245,6 +259,97 @@ namespace HexBot
             return new Rectangle(bounds.X + (bounds.Width - width) / 2, bounds.Y + (bounds.Height - height) / 2, width, height);
         }
 
+        // The dropdown stores display snapshots rather than relying on changing array indexes.
+        private DisplayChoice SelectedDisplay
+        {
+            get { return displayInput.SelectedItem as DisplayChoice; }
+        }
+
+        // Rebuild the list while preserving the chosen device when it is still connected.
+        private void RefreshDisplays(bool adjustChangedDisplay)
+        {
+            DisplayChoice previous = SelectedDisplay;
+            DisplayChoice[] choices = DisplayChoice.ConnectedDisplays();
+            if (choices.Length == 0)
+                throw new InvalidOperationException("No connected display is available.");
+            int selectedIndex = 0;
+            for (int index = 0; index < choices.Length; index++)
+            {
+                if (choices[index].IsPrimary)
+                    selectedIndex = index;
+            }
+            if (previous != null)
+            {
+                for (int index = 0; index < choices.Length; index++)
+                {
+                    if (choices[index].DeviceName == previous.DeviceName)
+                        selectedIndex = index;
+                }
+            }
+            bool wasSettingInputs = settingInputs;
+            settingInputs = true;
+            displayInput.Items.Clear();
+            displayInput.Items.AddRange(choices);
+            displayInput.SelectedIndex = selectedIndex;
+            settingInputs = wasSettingInputs;
+            DisplayChoice current = SelectedDisplay;
+            bool changed = previous == null || previous.DeviceName != current.DeviceName || previous.Bounds != current.Bounds;
+            if (adjustChangedDisplay && changed)
+                ApplyDisplaySelection();
+        }
+
+        // Opening the list also picks up newly attached monitors.
+        private void OnDisplayDropdown(object sender, EventArgs e)
+        {
+            RefreshDisplays(true);
+        }
+
+        // User selection pauses capture and centers the current area on the chosen screen.
+        private void OnDisplayChanged(object sender, EventArgs e)
+        {
+            if (!settingInputs && SelectedDisplay != null)
+                ApplyDisplaySelection();
+        }
+
+        // A target on a different screen must be rebound before clicking resumes.
+        private void ApplyDisplaySelection()
+        {
+            StopMonitoring();
+            followDemo = false;
+            if (targetWindow != IntPtr.Zero && !SelectedDisplay.Bounds.IntersectsWith(WindowsApi.ClientBounds(targetWindow)))
+            {
+                targetWindow = IntPtr.Zero;
+                targetProcess = 0;
+                targetLabel.Text = "Focus a window on this display and press F9.";
+            }
+            SetRegion(DisplayLayout.Centered(SelectedDisplay.Bounds, (int)widthInput.Value, (int)heightInput.Value));
+        }
+
+        // Binding a window automatically chooses its monitor before centering the scan area.
+        private void SelectDisplayForWindow(IntPtr window)
+        {
+            RefreshDisplays(false);
+            string deviceName = Screen.FromHandle(window).DeviceName;
+            bool wasSettingInputs = settingInputs;
+            settingInputs = true;
+            for (int index = 0; index < displayInput.Items.Count; index++)
+            {
+                if (((DisplayChoice)displayInput.Items[index]).DeviceName == deviceName)
+                {
+                    displayInput.SelectedIndex = index;
+                    break;
+                }
+            }
+            settingInputs = wasSettingInputs;
+        }
+
+        // Windows reports layout changes on the UI thread; refresh after its message completes.
+        private void OnDisplayLayoutChanged()
+        {
+            if (!resourcesReleased)
+                RefreshDisplays(true);
+        }
+
         // Read a fresh immutable-in-use settings object when starting a session.
         private ScanSettings ReadSettings()
         {
@@ -254,13 +359,16 @@ namespace HexBot
                 MinimumPixels = (int)minimumInput.Value, StableFrames = (int)stableInput.Value,
                 CooldownMs = (int)cooldownInput.Value, ScanIntervalMs = (int)intervalInput.Value,
                 Repeat = repeatInput.Checked, SendClicks = clickInput.Checked,
-                TargetWindow = targetWindow, TargetProcess = targetProcess, MainWindow = Handle
+                TargetWindow = targetWindow, TargetProcess = targetProcess, MainWindow = Handle,
+                DisplayDeviceName = SelectedDisplay.DeviceName, DisplayBounds = SelectedDisplay.Bounds
             };
         }
 
         // Suppress edit handlers while updating all four coordinate inputs together.
         private void SetRegion(Rectangle area)
         {
+            if (SelectedDisplay != null)
+                area = DisplayLayout.Fit(area, SelectedDisplay.Bounds);
             settingInputs = true;
             leftInput.Value = Math.Max(leftInput.Minimum, Math.Min(leftInput.Maximum, area.X));
             topInput.Value = Math.Max(topInput.Minimum, Math.Min(topInput.Maximum, area.Y));
@@ -268,12 +376,40 @@ namespace HexBot
             heightInput.Value = Math.Max(1, Math.Min(1024, area.Height));
             settingInputs = false;
             UpdateRegionLabel();
+            if (Visible)
+                ShowCurrentArea(this, EventArgs.Empty);
         }
 
         // Show enough coordinate information without exposing four inputs on Setup.
         private void UpdateRegionLabel()
         {
             regionLabel.Text = widthInput.Value + " x " + heightInput.Value + " at " + leftInput.Value + ", " + topInput.Value;
+        }
+
+        // Previewing always pauses monitoring; the green border is never deliberately scanned.
+        private void ShowCurrentArea(object sender, EventArgs e)
+        {
+            StopMonitoring();
+            if (!Visible || SelectedDisplay == null)
+                return;
+            Rectangle area = new Rectangle((int)leftInput.Value, (int)topInput.Value, (int)widthInput.Value, (int)heightInput.Value);
+            if (!SelectedDisplay.Bounds.Contains(area))
+            {
+                CloseAreaOverlay();
+                ShowMessage("The scan area must fit on the selected display.", true);
+                return;
+            }
+            if (areaOverlay == null || areaOverlay.IsDisposed)
+                areaOverlay = new AreaOverlay();
+            areaOverlay.ShowArea(area);
+        }
+
+        // Remove the indicator before starting capture, sampling a color or choosing a new area.
+        private void CloseAreaOverlay()
+        {
+            if (areaOverlay != null && !areaOverlay.IsDisposed)
+                areaOverlay.Close();
+            areaOverlay = null;
         }
 
         // User edits end the current run; no worker sees a partially edited configuration.
@@ -291,6 +427,7 @@ namespace HexBot
             followDemo = false;
             StopMonitoring();
             UpdateRegionLabel();
+            ShowCurrentArea(this, EventArgs.Empty);
         }
 
         // Automatic clicking requires a working global emergency-stop key.
@@ -300,7 +437,7 @@ namespace HexBot
             if (clickInput.Checked && !hotkeys.Contains(7))
             {
                 clickInput.Checked = false;
-                ShowMessage("F7 is unavailable. Close the app using that hotkey, then restart HexBot.", true);
+                ShowMessage("F7 is unavailable. Close the app using that hotkey, then restart Quick Trigger.", true);
             }
         }
 
@@ -346,8 +483,11 @@ namespace HexBot
         private void SampleColor()
         {
             StopMonitoring();
+            CloseAreaOverlay();
             try
             {
+                if (!WindowsApi.FlushDesktopDrawing())
+                    throw new InvalidOperationException("The desktop is still updating. Try sampling again.");
                 using (Bitmap pixel = new Bitmap(1, 1, PixelFormat.Format32bppArgb))
                 using (Graphics graphics = Graphics.FromImage(pixel))
                 {
@@ -367,11 +507,12 @@ namespace HexBot
         private void SelectRegion(object sender, EventArgs e)
         {
             StopMonitoring();
+            CloseAreaOverlay();
             followDemo = false;
             Hide();
             try
             {
-                using (RegionPicker picker = new RegionPicker())
+                using (RegionPicker picker = new RegionPicker(SelectedDisplay.Bounds))
                 {
                     if (picker.ShowDialog() == DialogResult.OK)
                     {
@@ -388,17 +529,15 @@ namespace HexBot
                 Show();
                 Activate();
             }
+            ShowCurrentArea(this, EventArgs.Empty);
         }
 
-        // Center on the bound window when available, otherwise on this monitor.
+        // Center uses the chosen display; F9 separately centers on the bound window.
         private void CenterRegion(object sender, EventArgs e)
         {
             StopMonitoring();
             followDemo = false;
-            Rectangle bounds = Screen.FromControl(this).Bounds;
-            if (WindowsApi.IsWindow(targetWindow))
-                bounds = WindowsApi.ClientBounds(targetWindow);
-            SetRegion(CenteredRegion(bounds, (int)widthInput.Value, (int)heightInput.Value));
+            SetRegion(DisplayLayout.Centered(SelectedDisplay.Bounds, (int)widthInput.Value, (int)heightInput.Value));
         }
 
         // Bind the active window, record its process identity and center the capture area.
@@ -420,6 +559,7 @@ namespace HexBot
         // Saving the process ID also protects against Windows reusing a closed handle.
         private void BindWindow(IntPtr window)
         {
+            SelectDisplayForWindow(window);
             targetWindow = window;
             WindowsApi.GetWindowThreadProcessId(window, out targetProcess);
             targetLabel.Text = "Bound: " + WindowsApi.WindowTitle(window);
@@ -432,14 +572,15 @@ namespace HexBot
             if (demo == null || demo.IsDisposed)
             {
                 demo = new DemoForm();
-                Rectangle desktop = Screen.FromControl(this).WorkingArea;
                 demo.StartPosition = FormStartPosition.Manual;
-                demo.Location = new Point(Math.Max(desktop.Left, desktop.Right - demo.Width - 16), desktop.Top + 24);
-                if (desktop.Width >= Width + demo.Width + 48)
-                    Location = new Point(desktop.Left + 16, desktop.Top + 24);
                 demo.GeometryChanged += OnDemoMoved;
                 demo.FormClosed += OnDemoClosed;
             }
+            followDemo = false;
+            Rectangle desktop = Screen.FromRectangle(SelectedDisplay.Bounds).WorkingArea;
+            demo.Location = new Point(Math.Max(desktop.Left, desktop.Right - demo.Width - 16), desktop.Top + 24);
+            if (Screen.FromControl(this).DeviceName == SelectedDisplay.DeviceName && desktop.Width >= Width + demo.Width + 48)
+                Location = new Point(desktop.Left + 16, desktop.Top + 24);
             demo.TargetColor = targetColor;
             demo.Show();
             demo.Activate();
@@ -455,6 +596,7 @@ namespace HexBot
             if (followDemo)
             {
                 StopMonitoring();
+                SelectDisplayForWindow(demo.Handle);
                 SetRegion(demo.ScanRegion);
             }
         }
@@ -489,11 +631,19 @@ namespace HexBot
             string error = settings.Validate();
             if (error == null && !SystemInformation.VirtualScreen.Contains(settings.Region))
                 error = "The scan area must be inside the current desktop.";
+            if (error == null && !DisplayChoice.StillConnected(settings.DisplayDeviceName, settings.DisplayBounds))
+                error = "The selected display changed. Select it again from the Display menu.";
             if (error == null && settings.SendClicks && (!hotkeys.Contains(7) || !WindowsApi.IsWindow(targetWindow)))
                 error = "Click mode needs F7 available and a window bound with F9.";
             if (error != null)
             {
                 ShowMessage(error, true);
+                return;
+            }
+            CloseAreaOverlay();
+            if (!WindowsApi.FlushDesktopDrawing())
+            {
+                ShowMessage("The desktop is still updating. Press F6 again to start.", true);
                 return;
             }
             worker = new ScanWorker(settings);
@@ -602,7 +752,7 @@ namespace HexBot
             using (SaveFileDialog dialog = new SaveFileDialog())
             {
                 dialog.Filter = "CSV files (*.csv)|*.csv";
-                dialog.FileName = "HexBot-events-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".csv";
+                dialog.FileName = "QuickTrigger-events-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".csv";
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                     return;
                 try
@@ -635,17 +785,20 @@ namespace HexBot
             }
             if (unavailable.Count > 0)
                 ShowMessage("Hotkeys already in use: " + string.Join(", ", unavailable.ToArray()), true);
+            ShowCurrentArea(this, EventArgs.Empty);
         }
 
         // Global hotkeys reach this message handler even while the form is minimized.
         protected override void WndProc(ref Message message)
         {
+            if (message.Msg == 0x007E && displayInput != null && IsHandleCreated && !resourcesReleased)
+                BeginInvoke(new Action(OnDisplayLayoutChanged));
             if (message.Msg == 0x0312)
             {
                 switch (message.WParam.ToInt32())
                 {
                     case 6: ToggleMonitoring(this, EventArgs.Empty); break;
-                    case 7: StopMonitoring(); ShowMessage("Stopped by F7.", false); break;
+                    case 7: StopMonitoring(); CloseAreaOverlay(); ShowMessage("Stopped by F7.", false); break;
                     case 8: SampleColor(); break;
                     case 9: BindActiveWindow(); break;
                 }
@@ -682,6 +835,7 @@ namespace HexBot
                 return;
             resourcesReleased = true;
             StopMonitoring();
+            CloseAreaOverlay();
             refreshTimer.Stop();
             refreshTimer.Dispose();
             foreach (int number in hotkeys)

@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace HexBot
+namespace QuickTrigger
 {
     // A local scene supplies a moving target, a same-color decoy and a click counter.
     internal sealed class DemoForm : Form
@@ -38,7 +38,7 @@ namespace HexBot
         // This UI animation timer affects only the demo, never the scanner.
         public DemoForm()
         {
-            Text = "HexBot - Test Scene";
+            Text = "Quick Trigger - Test Scene";
             Font = new Font("Segoe UI", 9.5f);
             BackColor = Color.FromArgb(17, 24, 36);
             ClientSize = new Size(580, 430);
@@ -104,7 +104,7 @@ namespace HexBot
             int centerX = ClientSize.Width / 2;
             int centerY = ClientSize.Height / 2;
             using (Font title = new Font("Segoe UI", 18, FontStyle.Bold))
-                graphics.DrawString("HexBot test scene", title, Brushes.White, 22, 18);
+                graphics.DrawString("Quick Trigger test scene", title, Brushes.White, 22, 18);
             graphics.DrawString("The target crosses the dotted scan area.", Font, Brushes.LightSlateGray, 24, 52);
             using (Pen border = new Pen(Color.SlateGray))
             {

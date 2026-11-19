@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Globalization;
 
-namespace HexBot
+namespace QuickTrigger
 {
     // One run uses one settings snapshot. Editing the form stops that run.
     internal sealed class ScanSettings
@@ -20,6 +20,8 @@ namespace HexBot
         public IntPtr TargetWindow;
         public uint TargetProcess;
         public IntPtr MainWindow;
+        public string DisplayDeviceName;
+        public Rectangle DisplayBounds;
 
         // Timing accepts every positive 32-bit integer; there are no custom caps.
         public string Validate()
@@ -28,6 +30,8 @@ namespace HexBot
                 return "Cooldown and scan interval must be at least 1 ms.";
             if (Region.Width < 1 || Region.Height < 1 || Region.Width > 1024 || Region.Height > 1024)
                 return "Choose an area between 1 x 1 and 1024 x 1024 pixels.";
+            if (!string.IsNullOrEmpty(DisplayDeviceName) && !DisplayBounds.Contains(Region))
+                return "The scan area must fit entirely on the selected display.";
             if (MinimumPixels < 1 || MinimumPixels > (long)Region.Width * Region.Height)
                 return "Minimum pixels must fit inside the scan area.";
             if (StableFrames < 1)

@@ -6,7 +6,7 @@ using System.Drawing.Imaging;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace HexBot
+namespace QuickTrigger
 {
     // A status snapshot contains values only; the UI never reads worker-owned controls.
     internal sealed class ScanStatus
@@ -63,7 +63,7 @@ namespace HexBot
             if (thread != null)
                 throw new InvalidOperationException("This scan session has already started.");
             thread = new Thread(Run);
-            thread.Name = "HexBot scanner";
+            thread.Name = "Quick Trigger scanner";
             thread.IsBackground = true;
             thread.Start();
         }
@@ -130,6 +130,7 @@ namespace HexBot
             double rateWindowStart = 0;
             double previewTime = double.NegativeInfinity;
             double scanRate = 0;
+            double displayCheckTime = double.NegativeInfinity;
             long scansInWindow = 0;
             long triggers = 0;
             try
@@ -141,19 +142,26 @@ namespace HexBot
                     while (!stopping)
                     {
                         double scanStarted = clock.Elapsed.TotalMilliseconds;
+                        // Detect monitor changes even if the main window has not processed them yet.
+                        if (scanStarted - displayCheckTime >= 500 && !string.IsNullOrEmpty(settings.DisplayDeviceName))
+                        {
+                            if (!DisplayChoice.StillConnected(settings.DisplayDeviceName, settings.DisplayBounds))
+                                throw new InvalidOperationException("The selected display changed or disconnected. Select it again.");
+                            displayCheckTime = scanStarted;
+                        }
                         if (WindowsApi.StopKeyPressed())
                         {
                             RequestStop();
                             break;
                         }
 
-                        // Moving HexBot over its own region would otherwise create visual feedback.
+                        // Covering the scan area with the control window would create visual feedback.
                         bool overlaps = !WindowsApi.IsIconic(settings.MainWindow) &&
                             WindowsApi.WindowBounds(settings.MainWindow).IntersectsWith(settings.Region);
                         if (overlaps)
                         {
                             triggerGate.ResetPresence();
-                            Publish(new ScanStatus { Message = "Move or minimize HexBot; it covers the scan area.", Triggers = triggers }, null);
+                            Publish(new ScanStatus { Message = "Move or minimize Quick Trigger; it covers the scan area.", Triggers = triggers }, null);
                             if (!timer.Wait(settings.ScanIntervalMs, stop))
                                 break;
                             continue;

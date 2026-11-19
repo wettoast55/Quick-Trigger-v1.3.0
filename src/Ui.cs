@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace HexBot
+namespace QuickTrigger
 {
     // Small factories keep repetitive styling out of the form's behavior code.
     internal static class Ui
