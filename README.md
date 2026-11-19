@@ -54,6 +54,7 @@ The detector counts matching pixels throughout the area. Each red, green and blu
 
 ## Logs
 
+<<<<<<< HEAD
 **Export CSV** stops monitoring and saves up to the most recent 10,000 retained events. Nothing is exported until you choose a destination. If a busy interface causes pending events to overflow, the Events page reports that separate dropped-event count.
 
 - `would_fire`: the trigger qualified in detection-only mode.
@@ -84,3 +85,19 @@ Run **build.cmd** to rebuild with the .NET Framework compiler. Run **test.cmd** 
 Comments explain each class, method and non-obvious block. Names describe their purpose. No external packages, obfuscation, network calls, game hooks or drivers are used.
 
 Windows API references: [CreateWaitableTimerEx](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-createwaitabletimerexw), [SetWaitableTimer](https://learn.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-setwaitabletimer), [SendInput](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput), [CopyFromScreen](https://learn.microsoft.com/en-us/dotnet/api/system.drawing.graphics.copyfromscreen).
+=======
+## Build and test
+
+Run `build.cmd` in this folder. It uses the .NET Framework C# compiler at `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe` and produces a 64-bit executable. No NuGet packages are used. The source uses C# 5 syntax for compatibility with that compiler.
+
+From PowerShell, run the deterministic tests without starting the GUI:
+
+```powershell
+$reportPath = Join-Path $PWD 'test-results.txt'
+$testProcess = Start-Process -FilePath '.\ColorTriggerLab.exe' -ArgumentList @('--self-test', ('"' + $reportPath + '"')) -WindowStyle Hidden -Wait -PassThru
+Get-Content -LiteralPath $reportPath
+$testProcess.ExitCode
+```
+
+Source layout: `Core.cs` contains detection and timing; `Native.cs` contains Windows interop; `MainForm.cs` contains capture/UI; `DemoForm.cs` and `RegionPicker.cs` provide testing and selection; `SelfTests.cs` verifies deterministic behavior.
+>>>>>>> 8f1c62c1ec462d38154a4a213ee33fca9babac7f
