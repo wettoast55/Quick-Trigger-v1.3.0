@@ -4,19 +4,28 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace ColorTriggerLab
+namespace HexBot
 {
+    // A local scene supplies a moving target, a same-color decoy and a click counter.
     internal sealed class DemoForm : Form
     {
-        private readonly Timer timer = new Timer();
+        private readonly Timer animationTimer = new Timer();
         private readonly Stopwatch clock = Stopwatch.StartNew();
-        private int clicks;
+        private Color targetColor = Color.FromArgb(255, 213, 74);
         private bool moving = true;
-        private bool visible = true;
-        private bool decoy;
-        private Color target = Color.FromArgb(255, 213, 74);
+        private bool showTarget = true;
+        private bool showDecoy;
+        private int clicks;
         public event EventHandler GeometryChanged;
-        public Color TargetColor { get { return target; } set { target = value; Invalidate(); } }
+
+        // Match the detector's chosen color when the scene is used for calibration.
+        public Color TargetColor
+        {
+            get { return targetColor; }
+            set { targetColor = value; Invalidate(); }
+        }
+
+        // The dotted box always encloses the same 120 x 120 physical-pixel area.
         public Rectangle ScanRegion
         {
             get
@@ -26,63 +35,109 @@ namespace ColorTriggerLab
             }
         }
 
+        // This UI animation timer affects only the demo, never the scanner.
         public DemoForm()
         {
-            Text = "Color Trigger Lab - Test Scene";
-            BackColor = Color.FromArgb(15, 22, 31);
-            ForeColor = Color.FromArgb(225, 232, 243);
-            Font = new Font("Segoe UI", 10);
-            ClientSize = new Size(600, 500);
-            MinimumSize = new Size(400, 360);
+            Text = "HexBot - Test Scene";
+            Font = new Font("Segoe UI", 9.5f);
+            BackColor = Color.FromArgb(17, 24, 36);
+            ClientSize = new Size(580, 430);
+            MinimumSize = new Size(540, 400);
             DoubleBuffered = true;
             KeyPreview = true;
-            timer.Interval = 25;
-            timer.Tick += delegate { Invalidate(); };
-            timer.Start();
-            KeyDown += delegate(object sender, KeyEventArgs e) {
-                if (e.KeyCode == Keys.Space) moving = !moving;
-                if (e.KeyCode == Keys.T) visible = !visible;
-                if (e.KeyCode == Keys.D) decoy = !decoy;
-                if (e.KeyCode == Keys.R) clicks = 0;
-                Invalidate();
-            };
-            MouseDown += delegate(object sender, MouseEventArgs e) { if (e.Button == MouseButtons.Left) { clicks++; Invalidate(); } };
-            LocationChanged += delegate { if (GeometryChanged != null) GeometryChanged(this, EventArgs.Empty); };
-            SizeChanged += delegate { if (GeometryChanged != null) GeometryChanged(this, EventArgs.Empty); };
-            FormClosed += delegate { timer.Dispose(); };
+            animationTimer.Interval = 25;
+            animationTimer.Tick += OnAnimationTick;
+            animationTimer.Start();
         }
 
+        // Repainting calculates the target's position from elapsed time.
+        private void OnAnimationTick(object sender, EventArgs e)
+        {
+            Invalidate();
+        }
+
+        // Keyboard switches create predictable positive and negative test cases.
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            switch (e.KeyCode)
+            {
+                case Keys.Space: moving = !moving; break;
+                case Keys.T: showTarget = !showTarget; break;
+                case Keys.D: showDecoy = !showDecoy; break;
+                case Keys.R: clicks = 0; break;
+            }
+            Invalidate();
+        }
+
+        // Count every received left-click, including manual clicks used to focus the scene.
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            base.OnMouseDown(e);
+            if (e.Button == MouseButtons.Left)
+                clicks++;
+            Invalidate();
+        }
+
+        // Tell the main form when the scan box moves on the desktop.
+        protected override void OnLocationChanged(EventArgs e)
+        {
+            base.OnLocationChanged(e);
+            if (GeometryChanged != null)
+                GeometryChanged(this, EventArgs.Empty);
+        }
+
+        // Resizing also changes the box's center.
+        protected override void OnSizeChanged(EventArgs e)
+        {
+            base.OnSizeChanged(e);
+            if (GeometryChanged != null)
+                GeometryChanged(this, EventArgs.Empty);
+        }
+
+        // Draw flat, predictable colors so tolerance changes are easy to understand.
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            Graphics g = e.Graphics;
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            int cx = ClientSize.Width / 2, cy = ClientSize.Height / 2;
-            using (Pen grid = new Pen(Color.FromArgb(29, 39, 53)))
+            Graphics graphics = e.Graphics;
+            graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            int centerX = ClientSize.Width / 2;
+            int centerY = ClientSize.Height / 2;
+            using (Font title = new Font("Segoe UI", 18, FontStyle.Bold))
+                graphics.DrawString("HexBot test scene", title, Brushes.White, 22, 18);
+            graphics.DrawString("The target crosses the dotted scan area.", Font, Brushes.LightSlateGray, 24, 52);
+            using (Pen border = new Pen(Color.SlateGray))
             {
-                for (int x = 0; x < ClientSize.Width; x += 40) g.DrawLine(grid, x, 76, x, ClientSize.Height - 82);
-                for (int y = 76; y < ClientSize.Height - 82; y += 40) g.DrawLine(grid, 0, y, ClientSize.Width, y);
+                border.DashStyle = DashStyle.Dash;
+                graphics.DrawRectangle(border, centerX - 61, centerY - 61, 122, 122);
             }
-            using (Font title = new Font("Segoe UI", 17, FontStyle.Bold)) g.DrawString("Controlled test scene", title, Brushes.White, 22, 18);
-            g.DrawString("Target crosses the scan area. Same-color decoys also trigger it.", Font, Brushes.LightSlateGray, 24, 52);
-            using (Pen area = new Pen(Color.FromArgb(72, 110, 134), 1)) { area.DashStyle = DashStyle.Dash; g.DrawRectangle(area, cx - 61, cy - 61, 122, 122); }
-            if (visible)
+            using (Brush targetBrush = new SolidBrush(targetColor))
             {
-                int x = cx + (moving ? (int)(Math.Sin(clock.Elapsed.TotalSeconds * 1.4) * Math.Max(80, ClientSize.Width / 2 - 70)) : 0);
-                using (Brush brush = new SolidBrush(target))
+                if (showTarget)
                 {
-                    g.FillEllipse(brush, x - 12, cy - 37, 24, 24);
-                    g.FillRectangle(brush, x - 19, cy - 8, 38, 35);
-                    g.FillRectangle(brush, x - 19, cy + 24, 13, 24);
-                    g.FillRectangle(brush, x + 6, cy + 24, 13, 24);
+                    int offset = 0;
+                    if (moving)
+                        offset = (int)(Math.Sin(clock.Elapsed.TotalSeconds * 1.4) * (ClientSize.Width / 2 - 70));
+                    int targetX = centerX + offset;
+                    graphics.FillEllipse(targetBrush, targetX - 12, centerY - 37, 24, 24);
+                    graphics.FillRectangle(targetBrush, targetX - 19, centerY - 8, 38, 35);
+                    graphics.FillRectangle(targetBrush, targetX - 19, centerY + 24, 13, 24);
+                    graphics.FillRectangle(targetBrush, targetX + 6, centerY + 24, 13, 24);
                 }
+                if (showDecoy)
+                    graphics.FillRectangle(targetBrush, centerX - 42, centerY + 36, 18, 18);
             }
-            if (decoy) using (Brush brush = new SolidBrush(target)) g.FillRectangle(brush, cx - 42, cy + 36, 18, 18);
-            using (Pen cross = new Pen(Color.FromArgb(160, 178, 200))) { g.DrawLine(cross, cx - 5, cy, cx + 5, cy); g.DrawLine(cross, cx, cy - 5, cx, cy + 5); }
-            string state = "Clicks received: " + clicks + "     Target: " + (visible ? "shown" : "hidden") + "     Decoy: " + (decoy ? "on" : "off");
-            g.DrawString(state, Font, Brushes.White, 24, ClientSize.Height - 72);
-            g.DrawString("Space: pause motion    T: show/hide target    D: toggle decoy", Font, Brushes.LightSlateGray, 24, ClientSize.Height - 46);
-            g.DrawString("F6: start/stop detector    F7: emergency stop    R: reset clicks", Font, Brushes.LightSlateGray, 24, ClientSize.Height - 24);
+            graphics.DrawString("Clicks received: " + clicks, Font, Brushes.White, 24, ClientSize.Height - 74);
+            graphics.DrawString("Space: pause motion    T: show/hide target    D: toggle decoy", Font, Brushes.LightSlateGray, 24, ClientSize.Height - 48);
+            graphics.DrawString("F6: start/stop    F7: stop    R: reset click counter", Font, Brushes.LightSlateGray, 24, ClientSize.Height - 25);
+        }
+
+        // Dispose also handles forms created and closed by tests without being shown.
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                animationTimer.Dispose();
+            base.Dispose(disposing);
         }
     }
 }

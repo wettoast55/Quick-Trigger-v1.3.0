@@ -2,17 +2,17 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace ColorTriggerLab
+namespace HexBot
 {
-    // The selection overlay exists only while choosing a rectangle; it is closed
-    // before capture starts so its colors cannot contaminate the detector.
+    // A temporary overlay lets the user draw a rectangle across the desktop.
     internal sealed class RegionPicker : Form
     {
-        private Point anchor;
+        private Point startPoint;
         private Rectangle selection;
         private bool dragging;
         public Rectangle SelectedRegion { get; private set; }
 
+        // The overlay closes before any captured pixels are analyzed.
         public RegionPicker()
         {
             FormBorderStyle = FormBorderStyle.None;
@@ -25,41 +25,78 @@ namespace ColorTriggerLab
             Cursor = Cursors.Cross;
             DoubleBuffered = true;
             KeyPreview = true;
-            KeyDown += delegate(object sender, KeyEventArgs e) { if (e.KeyCode == Keys.Escape) { DialogResult = DialogResult.Cancel; Close(); } };
         }
 
+        // Escape cancels without changing the saved scan area.
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.KeyCode == Keys.Escape)
+            {
+                DialogResult = DialogResult.Cancel;
+                Close();
+            }
+        }
+
+        // A left-button drag starts a selection; a right-click cancels it.
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
-            if (e.Button == MouseButtons.Right) { DialogResult = DialogResult.Cancel; Close(); return; }
-            anchor = e.Location; dragging = true; Capture = true;
+            if (e.Button == MouseButtons.Right)
+            {
+                DialogResult = DialogResult.Cancel;
+                Close();
+                return;
+            }
+            if (e.Button != MouseButtons.Left)
+                return;
+            startPoint = e.Location;
+            dragging = true;
+            Capture = true;
         }
 
-        protected override void OnMouseMove(MouseEventArgs e)
+        // Normalize the corners so dragging in any direction works.
+        private void UpdateSelection(Point pointer)
         {
-            base.OnMouseMove(e);
-            if (!dragging) return;
-            selection = Rectangle.FromLTRB(Math.Min(anchor.X, e.X), Math.Min(anchor.Y, e.Y), Math.Max(anchor.X, e.X), Math.Max(anchor.Y, e.Y));
+            selection = Rectangle.FromLTRB(
+                Math.Min(startPoint.X, pointer.X), Math.Min(startPoint.Y, pointer.Y),
+                Math.Max(startPoint.X, pointer.X), Math.Max(startPoint.Y, pointer.Y));
             Invalidate();
         }
 
+        // Repaint only while the user is drawing the rectangle.
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (dragging)
+                UpdateSelection(e.Location);
+        }
+
+        // Convert the final local rectangle to physical desktop coordinates.
         protected override void OnMouseUp(MouseEventArgs e)
         {
             base.OnMouseUp(e);
-            if (!dragging || e.Button != MouseButtons.Left) return;
-            dragging = false; Capture = false;
-            if (selection.Width < 1 || selection.Height < 1) return;
+            if (!dragging || e.Button != MouseButtons.Left)
+                return;
+            UpdateSelection(e.Location);
+            dragging = false;
+            Capture = false;
+            if (selection.Width < 1 || selection.Height < 1)
+                return;
             SelectedRegion = new Rectangle(PointToScreen(selection.Location), selection.Size);
-            DialogResult = DialogResult.OK; Close();
+            DialogResult = DialogResult.OK;
+            Close();
         }
 
+        // A border and a short instruction are the only overlay decorations.
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
-            using (Pen pen = new Pen(Color.White, 3)) e.Graphics.DrawRectangle(pen, selection);
+            using (Pen border = new Pen(Color.White, 3))
+                e.Graphics.DrawRectangle(border, selection);
             Point pointer = PointToClient(Cursor.Position);
-            using (Font font = new Font("Segoe UI", 15, FontStyle.Bold))
-                e.Graphics.DrawString("Drag a region  |  Esc cancels", font, Brushes.White, pointer.X + 20, pointer.Y + 20);
+            using (Font font = new Font("Segoe UI", 14, FontStyle.Bold))
+                e.Graphics.DrawString("Drag an area  |  Esc cancels", font, Brushes.White, pointer.X + 20, pointer.Y + 20);
         }
     }
 }

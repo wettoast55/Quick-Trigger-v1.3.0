@@ -1,18 +1,30 @@
 using System;
+using System.Reflection;
 using System.Windows.Forms;
 
-namespace ColorTriggerLab
+// Executable properties use the same name as the window and package.
+[assembly: AssemblyTitle("HexBot")]
+[assembly: AssemblyProduct("HexBot")]
+[assembly: AssemblyDescription("Screen-region color detection and input testing")]
+[assembly: AssemblyVersion("2.0.0.0")]
+[assembly: AssemblyFileVersion("2.0.0.0")]
+
+namespace HexBot
 {
     internal static class Program
     {
+        // STA is required by WinForms dialogs, clipboard support and window controls.
         [STAThread]
-        private static int Main(string[] args)
+        private static int Main(string[] arguments)
         {
-            Native.EnableDpiAwareness();
-            if (args.Length > 0 && args[0] == "--self-test")
-                return SelfTests.Run(args.Length > 1 ? args[1] : "test-results.txt");
+            WindowsApi.EnableDpiAwareness();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            if (arguments.Length > 0 && arguments[0] == "--self-test")
+            {
+                string report = arguments.Length > 1 ? arguments[1] : "test-results.txt";
+                return SelfTests.Run(report);
+            }
             Application.Run(new MainForm());
             return 0;
         }
