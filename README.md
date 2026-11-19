@@ -72,24 +72,6 @@ CSV includes UTC timestamps, action, matching-pixel count/fraction, capture-plus
 
 Use your game's own render/event telemetry and input-handler timestamps to measure render-to-input or render-to-shot latency. Compare false positives with false negatives across UI, particles, lighting, color grading, antialiasing, target sizes and accessibility palettes. Detection by an anti-cheat is a separate outcome that this app cannot infer.
 
-## Vanguard and capture limits
-
-This build has **no Vanguard integration, stealth implementation, bypass, or invisibility claim**. It has not been tested against Vanguard. Riot publicly describes detecting pixel/color bots; using screen pixels instead of reading game memory is not evidence that a program is undetectable. Riot's public materials describe Vanguard as its custom security software. This project does not establish that Vanguard is available for integration into a third-party game.
-
-The app uses documented desktop screen capture (`Graphics.CopyFromScreen`), global hotkeys (`RegisterHotKey`) and standard mouse input (`SendInput`). There are no drivers, process-memory reads, game hooks, modified game files or privileged components.
-
-Desktop capture sees visible pixels. Occlusion, exclusive fullscreen, protected surfaces, HDR/display conversion and overlays can cause missing pixels or changed colors. Inspect the preview and sample from the actual captured presentation. Avoid placing the tester over the region: it pauses capture there to prevent feedback from its own preview. A rectangle spanning empty space between monitors can capture meaningless pixels; prefer a region fully within one display.
-
-For anti-cheat evaluation, retain a transparent test build and a test matrix recording game build, anti-cheat version, display configuration, detector settings, input accepted/rejected and the anti-cheat's actual result. A run without a visible response does not establish invisibility or absence of later enforcement.
-
-References checked November 18, 2026:
-
-- [Riot: Vanguard's detection of pixelbots](https://playvalorant.com/en-gb/news/dev/vanguard-hits-new-bans-per-second-record/)
-- [Riot: Vanguard FAQ](https://support.riotgames.com/en-us/league-of-legends/performance/riot-vanguard-faq-league-of-legends)
-- [Microsoft: Graphics.CopyFromScreen](https://learn.microsoft.com/en-us/dotnet/api/system.drawing.graphics.copyfromscreen)
-- [Microsoft: SendInput and integrity restrictions](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)
-- [Microsoft: RegisterHotKey](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-registerhotkey)
-
 ## Build and test
 
 Run `build.cmd` in this folder. It uses the .NET Framework C# compiler at `%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\csc.exe` and produces a 64-bit executable. No NuGet packages are used. The source uses C# 5 syntax for compatibility with that compiler.
@@ -102,7 +84,5 @@ $testProcess = Start-Process -FilePath '.\ColorTriggerLab.exe' -ArgumentList @('
 Get-Content -LiteralPath $reportPath
 $testProcess.ExitCode
 ```
-
-Tests cover per-channel thresholds, bitmap counting, consecutive-frame requirements, cooldown and repeat behavior, reset behavior, native input layout, unbound-window blocking and locale-independent CSV output. They never send clicks. See `test-results.txt` for the build's recorded results.
 
 Source layout: `Core.cs` contains detection and timing; `Native.cs` contains Windows interop; `MainForm.cs` contains capture/UI; `DemoForm.cs` and `RegionPicker.cs` provide testing and selection; `SelfTests.cs` verifies deterministic behavior.
