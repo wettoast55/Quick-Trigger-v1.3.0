@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using Microsoft.Win32.SafeHandles;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // Short waits use a high-resolution Windows timer rather than the form's UI timer.
     internal sealed class ScanTimer : IDisposable

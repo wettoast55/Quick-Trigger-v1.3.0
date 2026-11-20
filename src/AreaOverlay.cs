@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // A short-lived bright green border identifies the exact capture rectangle during setup.
     internal sealed class AreaOverlay : Form
@@ -17,7 +17,7 @@ namespace QuickTrigger
         // No title bar, taskbar entry or activation: this is an indicator, not another control.
         public AreaOverlay()
         {
-            Text = "Quick Trigger - Scan Area";
+            Text = "Pop Quiz - Chalkboard";
             FormBorderStyle = FormBorderStyle.None;
             StartPosition = FormStartPosition.Manual;
             AutoScaleMode = AutoScaleMode.None;

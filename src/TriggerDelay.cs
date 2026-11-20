@@ -1,6 +1,6 @@
 using System;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // One generator per scan session supplies a fresh, uniformly chosen whole-millisecond delay.
     internal sealed class TriggerDelay

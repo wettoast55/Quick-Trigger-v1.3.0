@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // Keep a snapshot of a display's identity and physical desktop coordinates.
     internal sealed class DisplayChoice

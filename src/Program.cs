@@ -3,13 +3,13 @@ using System.Reflection;
 using System.Windows.Forms;
 
 // Executable properties use the same name as the window and package.
-[assembly: AssemblyTitle("Quick Trigger")]
-[assembly: AssemblyProduct("Quick Trigger")]
-[assembly: AssemblyDescription("Screen-region color detection and input testing")]
-[assembly: AssemblyVersion("2.3.0.0")]
-[assembly: AssemblyFileVersion("2.3.0.0")]
+[assembly: AssemblyTitle("Pop Quiz")]
+[assembly: AssemblyProduct("Pop Quiz")]
+[assembly: AssemblyDescription("April Fools classroom edition for color detection and input testing")]
+[assembly: AssemblyVersion("2.3.1.0")]
+[assembly: AssemblyFileVersion("2.3.1.0")]
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     internal static class Program
     {

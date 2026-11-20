@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // Small factories keep repetitive styling out of the form's behavior code.
     internal static class Ui
@@ -118,7 +118,7 @@ namespace QuickTrigger
             base.OnPaint(e);
             if (image == null)
             {
-                TextRenderer.DrawText(e.Graphics, "Live preview", Font, ClientRectangle, Color.SlateGray,
+                TextRenderer.DrawText(e.Graphics, "Classroom preview", Font, ClientRectangle, Color.SlateGray,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 return;
             }

@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // A local scene supplies a moving target, a same-color decoy and a click counter.
     internal sealed class DemoForm : Form
@@ -38,7 +38,7 @@ namespace QuickTrigger
         // This UI animation timer affects only the demo, never the scanner.
         public DemoForm()
         {
-            Text = "Quick Trigger - Test Scene";
+            Text = "Pop Quiz - Practice Lab";
             Font = new Font("Segoe UI", 9.5f);
             BackColor = Color.FromArgb(17, 24, 36);
             ClientSize = new Size(580, 430);
@@ -104,8 +104,8 @@ namespace QuickTrigger
             int centerX = ClientSize.Width / 2;
             int centerY = ClientSize.Height / 2;
             using (Font title = new Font("Segoe UI", 18, FontStyle.Bold))
-                graphics.DrawString("Quick Trigger test scene", title, Brushes.White, 22, 18);
-            graphics.DrawString("The target crosses the dotted scan area.", Font, Brushes.LightSlateGray, 24, 52);
+                graphics.DrawString("Pop Quiz practice lab", title, Brushes.White, 22, 18);
+            graphics.DrawString("The student crosses the dotted chalkboard. Take attendance.", Font, Brushes.LightSlateGray, 24, 52);
             using (Pen border = new Pen(Color.SlateGray))
             {
                 border.DashStyle = DashStyle.Dash;
@@ -127,9 +127,9 @@ namespace QuickTrigger
                 if (showDecoy)
                     graphics.FillRectangle(targetBrush, centerX - 42, centerY + 36, 18, 18);
             }
-            graphics.DrawString("Clicks received: " + clicks, Font, Brushes.White, 24, ClientSize.Height - 74);
-            graphics.DrawString("Space: pause motion    T: show/hide target    D: toggle decoy", Font, Brushes.LightSlateGray, 24, ClientSize.Height - 48);
-            graphics.DrawString("F6: start/stop    F7: stop    R: reset click counter", Font, Brushes.LightSlateGray, 24, ClientSize.Height - 25);
+            graphics.DrawString("Hands raised (clicks): " + clicks, Font, Brushes.White, 24, ClientSize.Height - 74);
+            graphics.DrawString("Space: freeze student    T: hide/show    D: class clown", Font, Brushes.LightSlateGray, 24, ClientSize.Height - 48);
+            graphics.DrawString("F6: class bell    F7: stop / recess    R: clear hand count", Font, Brushes.LightSlateGray, 24, ClientSize.Height - 25);
         }
 
         // Dispose also handles forms created and closed by tests without being shown.

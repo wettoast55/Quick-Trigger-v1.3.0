@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // Listen only while this small binding dialog has focus; no input is recorded elsewhere.
     internal sealed class BindingForm : Form
@@ -17,7 +17,7 @@ namespace QuickTrigger
         public BindingForm(bool sendClicks)
         {
             this.sendClicks = sendClicks;
-            Text = "Choose hold button";
+            Text = "Choose your hall pass";
             Font = new Font("Segoe UI", 10);
             BackColor = Ui.Background;
             ClientSize = new Size(420, 155);
@@ -26,10 +26,10 @@ namespace QuickTrigger
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
-            Label instructions = Ui.Label("Release all keys and mouse buttons, then hold the one you want to use. Esc cancels.", 388, 52);
+            Label instructions = Ui.Label("Hands off the desk! Release all buttons, then hold your hall-pass key or mouse button. Esc cancels.", 388, 52);
             instructions.Location = new Point(16, 16);
             Controls.Add(instructions);
-            hint = Ui.Label("Waiting for all buttons to be released...", 388, 68);
+            hint = Ui.Label("Waiting for hands off the desk...", 388, 68);
             hint.Location = new Point(16, 78);
             hint.ForeColor = Ui.Text;
             Controls.Add(hint);
@@ -51,7 +51,7 @@ namespace QuickTrigger
             {
                 ready = false;
                 SelectedKey = 0;
-                hint.Text = "Return to this window to choose a button.";
+                hint.Text = "Back to homeroom: focus this window to choose a button.";
                 return;
             }
             if (WindowsApi.KeyIsDown((int)Keys.Escape))
@@ -81,7 +81,7 @@ namespace QuickTrigger
             if (pressed == 0)
             {
                 if (!ready)
-                    hint.Text = "Hold a key or mouse button now.\nMouse side buttons are supported. F6-F9 are reserved.";
+                    hint.Text = "Hold your hall-pass key or mouse button.\nSide buttons work. F6-F9 belong to the faculty.";
                 ready = true;
                 return;
             }
@@ -95,7 +95,7 @@ namespace QuickTrigger
                 return;
             }
             SelectedKey = pressed;
-            hint.Text = ActivationKey.Name(pressed) + " selected. Release it to finish.";
+            hint.Text = ActivationKey.Name(pressed) + " gets the hall pass. Release it to finish.";
         }
 
         // Consume dialog navigation keys so Enter, Tab and arrows can also be bindings.

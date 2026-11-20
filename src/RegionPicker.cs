@@ -2,7 +2,7 @@ using System;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
         // A temporary overlay lets the user draw a rectangle on one selected display.
     internal sealed class RegionPicker : Form
@@ -100,7 +100,7 @@ namespace QuickTrigger
                 e.Graphics.DrawRectangle(border, selection);
             Point pointer = PointToClient(Cursor.Position);
             using (Font font = new Font("Segoe UI", 14, FontStyle.Bold))
-                e.Graphics.DrawString("Drag an area  |  Esc cancels", font, Brushes.White, pointer.X + 20, pointer.Y + 20);
+                e.Graphics.DrawString("Mark your chalkboard  |  Esc cancels", font, Brushes.White, pointer.X + 20, pointer.Y + 20);
         }
     }
 }
