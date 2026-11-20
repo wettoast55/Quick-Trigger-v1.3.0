@@ -43,6 +43,7 @@ namespace QuickTrigger
         private readonly ScanControl control;
         private readonly Func<int, bool> keyDown;
         private readonly Action<Graphics> captureForTest;
+        private readonly TriggerDelay triggerDelay;
         private Thread thread;
         private Bitmap pendingPreview;
         private bool clearPreview;
@@ -58,6 +59,13 @@ namespace QuickTrigger
 
         // Tests can provide held-button state and synthetic pixels without desktop capture.
         internal ScanWorker(ScanSettings settings, Func<int, bool> keyDown, Action<Graphics> captureForTest)
+            : this(settings, keyDown, captureForTest, new Random())
+        {
+        }
+
+        // A scripted random source lets tests exercise exact delay endpoints in the real worker.
+        internal ScanWorker(ScanSettings settings, Func<int, bool> keyDown,
+            Action<Graphics> captureForTest, Random delayRandom)
         {
             string error = settings.Validate();
             if (error != null)
@@ -65,6 +73,7 @@ namespace QuickTrigger
             this.settings = settings;
             this.keyDown = keyDown;
             this.captureForTest = captureForTest;
+            triggerDelay = new TriggerDelay(delayRandom);
             control = new ScanControl(settings, keyDown);
         }
 
@@ -145,6 +154,19 @@ namespace QuickTrigger
             }
         }
 
+        // Called during delay slices as well as at submission; F7 and release discard pending work.
+        private bool CanContinueTrigger()
+        {
+            if (stopping)
+                return false;
+            if (keyDown((int)Keys.F7))
+            {
+                RequestStop();
+                return false;
+            }
+            return control.IsActive();
+        }
+
         // Capture uses one reusable bitmap and ordinary desktop screen-copy operations.
         private void Run()
         {
@@ -162,6 +184,9 @@ namespace QuickTrigger
                 using (Bitmap bitmap = new Bitmap(settings.Region.Width, settings.Region.Height, PixelFormat.Format32bppArgb))
                 using (Graphics graphics = Graphics.FromImage(bitmap))
                 {
+                    Func<double> readClock = delegate { return clock.Elapsed.TotalMilliseconds; };
+                    Func<double, bool> waitForDelay = delegate(double milliseconds) { return timer.Wait(milliseconds, stop); };
+                    Func<bool> canContinueTrigger = CanContinueTrigger;
                     while (!stopping)
                     {
                         double scanStarted = clock.Elapsed.TotalMilliseconds;
@@ -240,13 +265,21 @@ namespace QuickTrigger
                         string inputError = null;
                         if (shouldTrigger)
                         {
+                            int requestedDelayMs = triggerDelay.NextMilliseconds(settings.RandomDelay);
+                            double actualDelayMs;
+                            if (!TriggerDelay.Wait(requestedDelayMs, readClock, waitForDelay,
+                                canContinueTrigger, out actualDelayMs))
+                            {
+                                control.ResetPresence();
+                                continue;
+                            }
                             lock (inputLock)
                             {
                                 if (stopping || keyDown((int)Keys.F7))
                                     break;
 
                                 if (settings.SendClicks)
-                                    // Focus and pointer position can change during capture; check again.
+                                    // Focus and pointer position can change during capture or delay; check again.
                                     blocked = WindowsApi.ClickBlockReason(settings.TargetWindow, settings.TargetProcess, WindowsApi.CursorPosition());
                                 // Recheck at submission time for both clicks and detection-only events.
                                 if (blocked == null && control.IsActive())
@@ -259,11 +292,13 @@ namespace QuickTrigger
                                         if (!sent)
                                             inputError = "Windows rejected the click. Monitoring stopped.";
                                     }
+                                    control.RecordTrigger(clock.Elapsed.TotalMilliseconds);
                                     triggers++;
                                     QueueEvent(new TriggerEvent {
                                         TimestampUtc = DateTime.UtcNow, Action = action,
                                         MatchingPixels = matches, ScanMs = captureAndCountMs,
-                                        PresenceMs = presenceMs, Settings = settings
+                                        PresenceMs = presenceMs, Settings = settings,
+                                        RequestedDelayMs = requestedDelayMs, ActualDelayMs = actualDelayMs
                                     });
                                 }
                                 else
@@ -275,6 +310,7 @@ namespace QuickTrigger
                             continue;
 
                         // Actual throughput includes capture, filtering, input and scheduler delays.
+                        now = clock.Elapsed.TotalMilliseconds;
                         scansInWindow++;
                         if (now - rateWindowStart >= 500)
                         {

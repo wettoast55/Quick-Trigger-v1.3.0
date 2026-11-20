@@ -100,12 +100,18 @@ namespace QuickTrigger
             return settings.HoldToScan ? Math.Min(HoldPollMs, remaining) : remaining;
         }
 
-        // Check hold state again after capture, before a match can qualify as a trigger.
+        // Check hold state again after capture; qualification alone does not consume a trigger.
         public bool TryTrigger(bool matched, double nowMs, out double presenceMs)
         {
             presenceMs = 0;
             return IsActive() && triggerGate.Evaluate(matched, nowMs, settings.StableFrames,
                 settings.CooldownMs, settings.Repeat, out presenceMs);
+        }
+
+        // Only a submitted event consumes the presence and starts the next cooldown.
+        public void RecordTrigger(double nowMs)
+        {
+            triggerGate.RecordTrigger(nowMs);
         }
 
         // Focus changes and blocked clicks also require a fresh matching streak.

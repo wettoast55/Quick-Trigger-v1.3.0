@@ -19,7 +19,7 @@ namespace QuickTrigger
         private NumericUpDown toleranceInput, minimumInput, stableInput, cooldownInput, intervalInput;
         private TextBox colorInput;
         private ComboBox displayInput;
-        private CheckBox clickInput, repeatInput, holdInput;
+        private CheckBox clickInput, repeatInput, holdInput, randomDelayInput;
         private Label regionLabel, targetLabel, statusLabel, metricsLabel, messageLabel, eventCountLabel;
         private Button startButton, colorButton, bindingButton;
         private TabControl tabs;
@@ -152,6 +152,14 @@ namespace QuickTrigger
             intervalInput.ValueChanged += OnSettingsChanged;
             settings.Controls.Add(Ui.Pair("Cooldown (ms)", cooldownInput, "Scan interval (ms)", intervalInput));
 
+            randomDelayInput = new CheckBox();
+            randomDelayInput.Name = "RandomDelay";
+            randomDelayInput.AccessibleName = "Random delay (1-50 ms)";
+            randomDelayInput.Text = "Random delay (1-50 ms)";
+            randomDelayInput.AutoSize = true;
+            randomDelayInput.CheckedChanged += OnSettingsChanged;
+            settings.Controls.Add(randomDelayInput);
+
             repeatInput = new CheckBox();
             repeatInput.Text = "Repeat while color is present";
             repeatInput.AutoSize = true;
@@ -240,6 +248,8 @@ namespace QuickTrigger
             eventList.Columns.Add("Event", 120);
             eventList.Columns.Add("Pixels", 90);
             eventList.Columns.Add("Presence (ms)", 130);
+            eventList.Columns.Add("Delay (ms)", 100);
+            eventList.Columns.Add("Waited (ms)", 110);
             eventCountLabel = Ui.Label("Latest 100 shown; latest 10,000 retained for export.", 700, 30);
             eventCountLabel.Dock = DockStyle.Bottom;
             page.Controls.Add(eventList);
@@ -372,6 +382,7 @@ namespace QuickTrigger
                 TargetColor = targetColor, ColorTolerance = (int)toleranceInput.Value,
                 MinimumPixels = (int)minimumInput.Value, StableFrames = (int)stableInput.Value,
                 CooldownMs = (int)cooldownInput.Value, ScanIntervalMs = (int)intervalInput.Value,
+                RandomDelay = randomDelayInput.Checked,
                 Repeat = repeatInput.Checked, SendClicks = clickInput.Checked,
                 HoldToScan = holdInput.Checked, HoldKey = holdKey,
                 TargetWindow = targetWindow, TargetProcess = targetProcess, MainWindow = Handle,
@@ -783,7 +794,9 @@ namespace QuickTrigger
                 TriggerEvent entry = entries[index];
                 eventList.Items.Add(new ListViewItem(new string[] {
                     entry.TimestampUtc.ToLocalTime().ToString("HH:mm:ss.fff"), entry.Action,
-                    entry.MatchingPixels.ToString(), entry.PresenceMs.ToString("F2", CultureInfo.InvariantCulture)
+                    entry.MatchingPixels.ToString(), entry.PresenceMs.ToString("F2", CultureInfo.InvariantCulture),
+                    entry.RequestedDelayMs.ToString(CultureInfo.InvariantCulture),
+                    entry.ActualDelayMs.ToString("F2", CultureInfo.InvariantCulture)
                 }));
             }
             eventList.EndUpdate();

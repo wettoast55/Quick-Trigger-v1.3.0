@@ -41,6 +41,8 @@ namespace QuickTrigger
                 TestSettings();
                 TestHoldControl();
                 TestHoldWorker();
+                TestRandomDelay();
+                TestDelayWorker();
                 TestCsv();
                 TestTimer();
                 TestDisplayGeometry();
@@ -112,16 +114,21 @@ namespace QuickTrigger
             double presence;
             Check("Two-frame filter waits for the second scan", !gate.Evaluate(true, 0, 2, 250, false, out presence));
             Check("Second matching scan fires", gate.Evaluate(true, 33, 2, 250, false, out presence) && presence == 33);
+            gate.RecordTrigger(33);
             Check("Continuous match fires once without repeat", !gate.Evaluate(true, 1000, 2, 250, false, out presence));
             Check("Nonmatch clears the presence", !gate.Evaluate(false, 1010, 2, 250, false, out presence));
             Check("New presence must stabilize", !gate.Evaluate(true, 1040, 2, 250, false, out presence));
             Check("New stabilized presence fires", gate.Evaluate(true, 1073, 2, 250, false, out presence));
+            gate.RecordTrigger(1073);
             gate.Reset();
             Check("1 ms cooldown allows the first trigger", gate.Evaluate(true, 0, 1, 1, true, out presence));
+            gate.RecordTrigger(0);
             Check("1 ms cooldown rejects 0.999 ms", !gate.Evaluate(true, 0.999, 1, 1, true, out presence));
             Check("1 ms cooldown fires exactly at 1 ms", gate.Evaluate(true, 1, 1, 1, true, out presence));
+            gate.RecordTrigger(1);
             Check("Repeated trigger still requires another 1 ms", !gate.Evaluate(true, 1.999, 1, 1, true, out presence));
             Check("Repeated trigger fires at 2 ms", gate.Evaluate(true, 2, 1, 1, true, out presence));
+            gate.RecordTrigger(2);
             gate.ResetPresence();
             Check("Focus interruption preserves cooldown", !gate.Evaluate(true, 2.5, 1, 1, true, out presence));
             gate.Reset();
@@ -132,6 +139,18 @@ namespace QuickTrigger
             gate.Evaluate(true, 2, 3, 1, false, out presence);
             Check("Separated matches are not consecutive", !gate.Evaluate(true, 3, 3, 1, false, out presence));
             Check("Third consecutive frame fires", gate.Evaluate(true, 4, 3, 1, false, out presence) && presence == 2);
+
+            // A delayed or cancelled qualification must not shorten the gap between actual events.
+            gate.Reset();
+            Check("A match can qualify before its delayed submission", gate.Evaluate(true, 0, 1, 100, true, out presence));
+            gate.RecordTrigger(50);
+            Check("Cooldown starts after the delay, not when the match qualified", !gate.Evaluate(true, 100, 1, 100, true, out presence));
+            Check("Delayed cooldown rejects its final fractional millisecond", !gate.Evaluate(true, 149.999, 1, 100, true, out presence));
+            Check("Delayed cooldown expires at the actual submission boundary", gate.Evaluate(true, 150, 1, 100, true, out presence));
+            gate.Reset();
+            gate.Evaluate(true, 0, 1, int.MaxValue, false, out presence);
+            gate.ResetPresence();
+            Check("Cancelling a pending delay consumes neither cooldown nor presence", gate.Evaluate(true, 1, 1, int.MaxValue, false, out presence));
         }
 
         // The old lower and upper timing caps must not reappear in configuration validation.
@@ -205,12 +224,14 @@ namespace QuickTrigger
             Check("Repress starts a fresh scan without waiting for the old deadline", control.IsScanDue(12));
             Check("A released partial match cannot carry into the next hold", !control.TryTrigger(true, 12, out presence));
             Check("Fresh consecutive matches qualify", control.TryTrigger(true, 13, out presence) && presence == 1);
+            control.RecordTrigger(13);
             held = false;
             control.IsActive();
             held = true;
             control.TryTrigger(true, 14, out presence);
             Check("Repress cannot bypass the existing cooldown", !control.TryTrigger(true, 15, out presence));
             Check("A new hold can trigger when the preserved cooldown expires", control.TryTrigger(true, 113, out presence));
+            control.RecordTrigger(113);
             Check("The same held presence still fires only once", !control.TryTrigger(true, 300, out presence));
             held = false;
             Check("Releasing before submission blocks a qualified frame", !control.IsActive());
@@ -302,6 +323,197 @@ namespace QuickTrigger
             throw new InvalidOperationException("Timed out waiting for the synthetic scan worker.");
         }
 
+        // Fake clock/timer callbacks exercise early wakeups, overshoot and cancellation exactly.
+        private static void TestRandomDelay()
+        {
+            TriggerDelay picker = new TriggerDelay(new Random(4721));
+            HashSet<int> samples = new HashSet<int>();
+            bool inRange = true;
+            for (int index = 0; index < 10000; index++)
+            {
+                int sample = picker.NextMilliseconds(true);
+                inRange &= sample >= 1 && sample <= 50;
+                samples.Add(sample);
+            }
+            Check("Every random delay is inside the inclusive 1-50 ms range", inRange);
+            Check("Random sampling reaches both endpoints and all 50 values", samples.Count == 50 && samples.Contains(1) && samples.Contains(50));
+            TriggerDelay disabled = new TriggerDelay(new ScriptedDelayRandom(delegate { throw new InvalidOperationException("Disabled delay sampled randomness."); }));
+            Check("Disabled random delay requests zero without sampling", disabled.NextMilliseconds(false) == 0);
+
+            double now = 0;
+            double elapsed;
+            double longestSlice = 0;
+            bool active = true;
+            Func<double> clock = delegate { return now; };
+            Func<bool> canContinue = delegate { return active; };
+            Func<double, bool> earlyTimer = delegate(double ms) {
+                longestSlice = Math.Max(longestSlice, ms);
+                now += Math.Min(ms, 0.5);
+                return true;
+            };
+            Check("A 1 ms request cannot fire on an early timer wakeup", TriggerDelay.Wait(1, clock, earlyTimer, canContinue, out elapsed) && elapsed == 1);
+            now = 0;
+            Check("The full 50 ms delay completes without firing early", TriggerDelay.Wait(50, clock, earlyTimer, canContinue, out elapsed) && elapsed == 50);
+            Check("Delay slices poll cancellation at most every five requested milliseconds", longestSlice <= 5);
+            now = 0;
+            Func<double, bool> lateTimer = delegate(double ms) { now += ms + 12.5; return true; };
+            Check("Measured wait retains scheduler overshoot", TriggerDelay.Wait(1, clock, lateTimer, canContinue, out elapsed) && elapsed == 13.5);
+            now = 0;
+            Func<double, bool> releaseDuringWait = delegate(double ms) { now += ms; active = false; return true; };
+            Check("Hold release cancels a delay after it has started", !TriggerDelay.Wait(50, clock, releaseDuringWait, canContinue, out elapsed) && elapsed == 5);
+            active = true;
+            now = 0;
+            Func<double, bool> stopDuringWait = delegate(double ms) { now += 2; return false; };
+            Check("The stop signal interrupts an in-flight delay", !TriggerDelay.Wait(50, clock, stopDuringWait, canContinue, out elapsed) && elapsed == 2);
+            active = false;
+            Func<double, bool> unexpectedWait = delegate(double ms) { throw new InvalidOperationException("Unexpected wait."); };
+            Check("An already cancelled trigger never waits", !TriggerDelay.Wait(50, clock, unexpectedWait, canContinue, out elapsed));
+            active = true;
+            Check("Disabled delay does not invoke the timer", TriggerDelay.Wait(0, clock, unexpectedWait, canContinue, out elapsed) && elapsed == 0);
+        }
+
+        // Exercise the full scanner with synthetic frames and exact delay choices, without clicks.
+        private static void TestDelayWorker()
+        {
+            ScanSettings settings = new ScanSettings {
+                Region = new Rectangle(Screen.PrimaryScreen.Bounds.Location, new Size(16, 16)),
+                TargetColor = Color.Gold, StableFrames = 1, MinimumPixels = 1,
+                CooldownMs = 15, ScanIntervalMs = 1, Repeat = true, RandomDelay = true
+            };
+            int choices = 0;
+            Action<Graphics> capture = delegate(Graphics graphics) { graphics.Clear(settings.TargetColor); };
+            using (ScanWorker worker = new ScanWorker(settings, delegate(int key) { return false; }, capture,
+                new ScriptedDelayRandom(delegate { return Interlocked.Increment(ref choices) % 2 == 1 ? 50 : 1; })))
+            {
+                worker.Start();
+                TriggerEvent[] entries = WaitForEvents(worker, 2);
+                worker.RequestStop();
+                Check("Each repeated trigger draws a fresh delay, including both endpoints", entries[0].RequestedDelayMs == 50 && entries[1].RequestedDelayMs == 1 && choices >= 2);
+                Check("The real worker waits at least the chosen delay before logging", entries[0].ActualDelayMs >= 50 && entries[1].ActualDelayMs >= 1);
+                Check("Delay affects detection-only events too", entries[0].Action == "would_fire" && entries[1].Action == "would_fire");
+            }
+
+            settings.RandomDelay = false;
+            settings.Repeat = false;
+            settings.ScanIntervalMs = int.MaxValue;
+            using (ScanWorker worker = new ScanWorker(settings, delegate(int key) { return false; }, capture,
+                new ScriptedDelayRandom(delegate { throw new InvalidOperationException("Disabled worker sampled delay."); })))
+            {
+                worker.Start();
+                TriggerEvent entry = WaitForEvents(worker, 1)[0];
+                Check("Turning delay off preserves immediate triggering and zero delay logs", entry.RequestedDelayMs == 0 && entry.ActualDelayMs == 0);
+            }
+
+            // Release on the second hold poll after selection, once the first delay slice has run.
+            settings.RandomDelay = true;
+            settings.HoldToScan = true;
+            settings.CooldownMs = int.MaxValue;
+            int selected = 0;
+            int held = 1;
+            int releaseDuringDelay = 1;
+            int holdPolls = 0;
+            Func<int, bool> heldKey = delegate(int key) {
+                if (key != settings.HoldKey)
+                    return false;
+                if (Interlocked.CompareExchange(ref selected, 0, 0) != 0 &&
+                    Interlocked.CompareExchange(ref releaseDuringDelay, 0, 0) != 0 &&
+                    Interlocked.Increment(ref holdPolls) >= 2)
+                    Interlocked.Exchange(ref held, 0);
+                return Interlocked.CompareExchange(ref held, 0, 0) != 0;
+            };
+            using (ScanWorker worker = new ScanWorker(settings, heldKey, capture,
+                new ScriptedDelayRandom(delegate { Interlocked.Exchange(ref selected, 1); return 50; })))
+            {
+                worker.Start();
+                ScanUpdate released = WaitForStatus(worker, delegate(ScanStatus status) { return status.WaitingForHold; });
+                Check("The real worker discards a trigger when hold is released during its delay", released.Status.Triggers == 0 && released.Events.Length == 0);
+                Interlocked.Exchange(ref releaseDuringDelay, 0);
+                Interlocked.Exchange(ref held, 1);
+                TriggerEvent entry = WaitForEvents(worker, 1)[0];
+                Check("A cancelled delay does not consume even the maximum cooldown", entry.Action == "would_fire" && entry.RequestedDelayMs == 50);
+            }
+
+            // F7 is polled between slices even when the UI has not processed its hotkey message.
+            settings.HoldToScan = false;
+            selected = 0;
+            int stopPolls = 0;
+            Func<int, bool> emergencyKey = delegate(int key) {
+                return key == (int)Keys.F7 && Interlocked.CompareExchange(ref selected, 0, 0) != 0 &&
+                    Interlocked.Increment(ref stopPolls) >= 2;
+            };
+            using (ScanWorker worker = new ScanWorker(settings, emergencyKey, capture,
+                new ScriptedDelayRandom(delegate { Interlocked.Exchange(ref selected, 1); return 50; })))
+            {
+                worker.Start();
+                WaitForWorkerExit(worker);
+                ScanUpdate stopped = worker.ReadUpdate();
+                if (stopped.Preview != null)
+                    stopped.Preview.Dispose();
+                Check("F7 during an actual delay stops without submitting a pending event", !stopped.Status.Error && stopped.Status.Triggers == 0 && stopped.Events.Length == 0);
+            }
+
+            // RequestStop may come from the UI while a trigger is pending; it must never queue later.
+            ScanWorker stoppingWorker = null;
+            using (stoppingWorker = new ScanWorker(settings, delegate(int key) { return false; }, capture,
+                new ScriptedDelayRandom(delegate { stoppingWorker.RequestStop(); return 50; })))
+            {
+                stoppingWorker.Start();
+                WaitForWorkerExit(stoppingWorker);
+                ScanUpdate stopped = stoppingWorker.ReadUpdate();
+                if (stopped.Preview != null)
+                    stopped.Preview.Dispose();
+                Check("RequestStop discards a qualified pending trigger", !stopped.Status.Error && stopped.Events.Length == 0 && stopped.Status.Triggers == 0);
+            }
+        }
+
+        // Preserve events across status polls so a fast producer cannot race the test reader.
+        private static TriggerEvent[] WaitForEvents(ScanWorker worker, int count)
+        {
+            List<TriggerEvent> entries = new List<TriggerEvent>();
+            Stopwatch clock = Stopwatch.StartNew();
+            while (clock.ElapsedMilliseconds < 3000)
+            {
+                ScanUpdate update = worker.ReadUpdate();
+                if (update.Preview != null)
+                    update.Preview.Dispose();
+                if (update.Status.Error)
+                    throw new InvalidOperationException(update.Status.Message);
+                entries.AddRange(update.Events);
+                if (entries.Count >= count)
+                    return entries.ToArray();
+                Thread.Sleep(1);
+            }
+            throw new InvalidOperationException("Timed out waiting for delayed trigger events.");
+        }
+
+        // Bound cancellation tests so a regression cannot hang the test process.
+        private static void WaitForWorkerExit(ScanWorker worker)
+        {
+            Stopwatch clock = Stopwatch.StartNew();
+            while (!worker.IsFinished && clock.ElapsedMilliseconds < 2000)
+                Thread.Sleep(1);
+            if (!worker.IsFinished)
+                throw new InvalidOperationException("The stopped delay worker did not exit.");
+        }
+
+        // Script exact samples and reject a range that accidentally excludes either endpoint.
+        private sealed class ScriptedDelayRandom : Random
+        {
+            private readonly Func<int> next;
+
+            public ScriptedDelayRandom(Func<int> next)
+            {
+                this.next = next;
+            }
+
+            public override int Next(int minValue, int maxValue)
+            {
+                if (minValue != 1 || maxValue != 51)
+                    throw new InvalidOperationException("Unexpected random delay bounds.");
+                return next();
+            }
+        }
+
         // Export formatting must stay valid on computers that use a decimal comma.
         private static void TestCsv()
         {
@@ -324,10 +536,14 @@ namespace QuickTrigger
                 Check("CSV columns match the header", csv.Split(',').Length == TriggerEvent.CsvHeader.Split(',').Length);
                 Check("CSV uses decimal points in every locale", csv.Contains("0.125000,1.250,33.500"));
                 Check("CSV preserves UTC and negative coordinates", csv.Contains("Z,would_fire") && csv.Contains(",-120,0,120,120,#FFD54A,"));
-                Check("CSV retains the requested 1 ms values", csv.EndsWith(",1,1,false,false,5"));
+                Check("CSV retains the requested 1 ms values", csv.EndsWith(",1,1,false,false,5,false,0,0.000"));
                 entry.Settings.HoldToScan = true;
                 entry.Settings.HoldKey = (int)Keys.RButton;
-                Check("CSV records hold mode and the selected button", entry.ToCsv().EndsWith(",false,true,2"));
+                Check("CSV records hold mode and the selected button", entry.ToCsv().EndsWith(",false,true,2,false,0,0.000"));
+                entry.Settings.RandomDelay = true;
+                entry.RequestedDelayMs = 50;
+                entry.ActualDelayMs = 52.125;
+                Check("CSV records the delay toggle, sample and measured wait with decimal points", entry.ToCsv().EndsWith(",true,50,52.125"));
             }
             finally
             {
@@ -374,6 +590,14 @@ namespace QuickTrigger
                 Check("UI accepts 1 ms for both settings", cooldown.Value == 1 && interval.Value == 1);
                 Check("UI timing fields have no former upper caps", cooldown.Maximum == int.MaxValue && interval.Maximum == int.MaxValue);
                 Check("Main window is named Quick Trigger", form.Text == "Quick Trigger");
+                CheckBox randomDelay = (CheckBox)form.Controls.Find("RandomDelay", true)[0];
+                Check("Random delay starts disabled", !randomDelay.Checked);
+                randomDelay.Checked = true;
+                System.Reflection.MethodInfo readSettings = typeof(MainForm).GetMethod("ReadSettings",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                Check("The delay checkbox reaches the scan settings", ((ScanSettings)readSettings.Invoke(form, null)).RandomDelay);
+                randomDelay.Checked = false;
+                Check("Turning the delay checkbox off reaches the scan settings", !((ScanSettings)readSettings.Invoke(form, null)).RandomDelay);
                 CheckBox hold = (CheckBox)form.Controls.Find("HoldToScan", true)[0];
                 Button binding = (Button)form.Controls.Find("HoldBinding", true)[0];
                 Check("Hold mode starts disabled and retains the default mouse side button", !hold.Checked && !binding.Enabled && binding.Text == "Mouse 4 (Back)");

@@ -10,7 +10,7 @@ Extract the ZIP and open **QuickTrigger.exe**. Requires 64-bit Windows and .NET 
 2. Click **Test scene** for a quick check, or focus your own test window and press **F9** to bind it. F9 automatically selects that window's monitor.
 3. Choose an area with **Select area** or **Center**. Exact coordinates are on **Advanced**.
 4. Enter a six-digit hex color, use **Choose**, or hover over a pixel and press **F8**.
-5. Set **Cooldown (ms)** and **Scan interval (ms)**. Both accept **1**.
+5. Set **Cooldown (ms)** and **Scan interval (ms)**. Both accept **1**. Enable **Random delay (1-50 ms)** to add a fresh delay before each trigger.
 6. For button-controlled operation, enable **Hold to scan** and click the **Hold button** control to choose a key or mouse button.
 7. Press **F6** to start or arm. Press **F7** to stop immediately.
 
@@ -54,6 +54,18 @@ Clicking requires the bound window to be in the foreground, the pointer inside i
 
 ## Timing
 
+### Random trigger delay
+
+Enable **Random delay (1-50 ms)** on **Setup**. It starts off. Each qualifying trigger draws a new, uniformly chosen whole number from **1 through 50 ms, inclusive**, then waits before recording a detection-only event or sending a click. Repeat mode draws a fresh value for every event. Consecutive events can happen to draw the same value.
+
+The delay starts after the matching-frame and cooldown requirements are met. Cooldown starts when the event is actually submitted, so the delay does not consume the gap required before the next event. The scan interval still controls capture scheduling. There is only one pending trigger at a time; no additional frames are captured during its delay. The event uses the qualifying frame rather than checking for a new color match after waiting.
+
+F7, Stop, changing settings, or releasing the hold button cancels a pending trigger. During the delay, F7 and hold state are checked at intervals of at most **5 requested milliseconds**; the stop signal interrupts a timer wait immediately. Focus, pointer position and click eligibility are checked again before sending input. A cancelled trigger creates no event and does not consume cooldown.
+
+On **Events**, **Delay (ms)** is the chosen value and **Waited (ms)** is the measured time spent in the delay. Both are zero when this option is off. Windows scheduling can make the actual wait longer than requested, including longer than 50 ms. These values exclude capture and input-delivery time and are not a measurement of a game's end-to-end reaction time.
+
+### Scan interval and cooldown
+
 Cooldown and scan interval accept whole milliseconds from **1 to 2,147,483,647**, the positive 32-bit integer range. The previous custom lower and upper caps are gone. The defaults remain 250 ms cooldown and 33 ms scan interval.
 
 The scanner runs on a separate thread and uses a high-resolution Windows waitable timer where supported. The preview and interface refresh about ten times a second without controlling the scan rate. Scans run sequentially; when one takes too long, the app skips the missed deadline instead of building a queue.
@@ -69,6 +81,7 @@ See `test-results.txt` for measured timer-only waits from the included validatio
 | Setup | Display, color, timing, hold/repeat/click options and live preview |
 | Hold to scan | Enable the selected key or mouse button as a hold requirement |
 | Hold button | Choose the activation binding; changes pause the run |
+| Random delay (1-50 ms) | Add a newly sampled delay before each qualifying trigger |
 | Show area | Show the green scan-area outline for three seconds |
 | Advanced | Physical coordinates, area size, minimum pixels and stable frames |
 | Events | Latest 100 trigger records |
@@ -95,6 +108,8 @@ The detector counts matching pixels throughout the area. Each red, green and blu
 
 Exports include UTC time, matching-pixel count/fraction, capture duration, observed presence duration, region, color, timing settings, hold-mode state and the binding's Windows virtual-key code. Presence duration begins at the first eligible matching scan, not at the game's first rendered frame. It is not an end-to-end reaction-time measurement.
 
+Version 2.3 appends three CSV columns: `random_delay`, `requested_delay_ms` and `actual_delay_ms`. The first records whether the option was enabled, the second records the chosen whole-millisecond delay, and the third records the measured wait with millisecond decimals. Existing columns keep their positions. `eligible_presence_ms` ends at the qualifying scan and excludes the added delay. Cancelled pending triggers are not exported.
+
 Windowed or borderless test builds work best with desktop capture. Occlusion, exclusive fullscreen, protected content, HDR conversion and input filtering can affect results. This app uses ordinary Windows capture/input APIs and has no anti-cheat integration or bypass.
 
 ## Source and building
@@ -108,6 +123,7 @@ Run **build.cmd** to rebuild with the .NET Framework compiler. Run **test.cmd** 
 | `Activation.cs` | Binding names/validation, hold gating and scan deadlines |
 | `BindingForm.cs` | Choose one held keyboard key or mouse button |
 | `ScanTimer.cs` | Short, cancellable Windows timer waits |
+| `TriggerDelay.cs` | Inclusive 1-50 ms sampling and cancellable trigger-delay waits |
 | `WindowsApi.cs` | Documented Windows interop calls |
 | `MainForm.cs` | Controls, hotkeys, preview updates and export |
 | `Ui.cs` | Shared control styles and preview drawing |

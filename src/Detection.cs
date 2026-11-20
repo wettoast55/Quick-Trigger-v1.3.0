@@ -15,6 +15,7 @@ namespace QuickTrigger
         public int StableFrames = 2;
         public int CooldownMs = 250;
         public int ScanIntervalMs = 33;
+        public bool RandomDelay;
         public bool Repeat;
         public bool SendClicks;
         public bool HoldToScan;
@@ -121,6 +122,7 @@ namespace QuickTrigger
         private double firstMatchMs;
         private double lastFireMs = double.NegativeInfinity;
 
+        // Qualify a match without consuming it; a cancelled delay must not start cooldown.
         // nowMs comes from Stopwatch, so clock corrections cannot break cooldowns.
         public bool Evaluate(bool matched, double nowMs, int stableFrames, int cooldownMs, bool repeat, out double presenceMs)
         {
@@ -142,9 +144,14 @@ namespace QuickTrigger
                 return false;
 
             presenceMs = nowMs - firstMatchMs;
+            return true;
+        }
+
+        // Start cooldown at actual submission, after any requested trigger delay.
+        public void RecordTrigger(double nowMs)
+        {
             lastFireMs = nowMs;
             firedDuringPresence = true;
-            return true;
         }
 
         // Losing the color or focus clears the streak but preserves the cooldown.
@@ -170,9 +177,11 @@ namespace QuickTrigger
         public int MatchingPixels;
         public double ScanMs;
         public double PresenceMs;
+        public int RequestedDelayMs;
+        public double ActualDelayMs;
         public ScanSettings Settings;
 
-        public const string CsvHeader = "timestamp_utc,action,matching_pixels,matching_fraction,scan_ms,eligible_presence_ms,left,top,width,height,color_hex,tolerance,min_pixels,stable_frames,cooldown_ms,requested_interval_ms,repeat,hold_to_scan,hold_key_code";
+        public const string CsvHeader = "timestamp_utc,action,matching_pixels,matching_fraction,scan_ms,eligible_presence_ms,left,top,width,height,color_hex,tolerance,min_pixels,stable_frames,cooldown_ms,requested_interval_ms,repeat,hold_to_scan,hold_key_code,random_delay,requested_delay_ms,actual_delay_ms";
 
         // Invariant formatting prevents decimal commas from breaking the CSV columns.
         public string ToCsv()
@@ -180,12 +189,13 @@ namespace QuickTrigger
             Rectangle area = Settings.Region;
             double fraction = MatchingPixels / (double)(area.Width * area.Height);
             return string.Format(CultureInfo.InvariantCulture,
-                "{0:o},{1},{2},{3:F6},{4:F3},{5:F3},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18}",
+                "{0:o},{1},{2},{3:F6},{4:F3},{5:F3},{6},{7},{8},{9},{10},{11},{12},{13},{14},{15},{16},{17},{18},{19},{20},{21:F3}",
                 TimestampUtc, Action, MatchingPixels, fraction, ScanMs, PresenceMs,
                 area.X, area.Y, area.Width, area.Height, PixelDetector.ToHex(Settings.TargetColor),
                 Settings.ColorTolerance, Settings.MinimumPixels, Settings.StableFrames,
                 Settings.CooldownMs, Settings.ScanIntervalMs, Settings.Repeat ? "true" : "false",
-                Settings.HoldToScan ? "true" : "false", Settings.HoldKey);
+                Settings.HoldToScan ? "true" : "false", Settings.HoldKey,
+                Settings.RandomDelay ? "true" : "false", RequestedDelayMs, ActualDelayMs);
         }
     }
 }
