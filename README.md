@@ -1,7 +1,5 @@
 # Pop Quiz
 
-**SWE Faculty Edition · April Fools**
-
 Welcome to the world's most overqualified attendance assistant. It watches a chosen screen area for a color, takes attendance in the event log, and can raise a hand by sending a left-click. The school names are the joke; the controls still work.
 
 ## First day of class
