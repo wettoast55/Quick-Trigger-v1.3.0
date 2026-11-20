@@ -1,7 +1,7 @@
 using System;
 using System.Windows.Forms;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // A binding is one Windows key code, including the five standard mouse buttons.
     internal static class ActivationKey

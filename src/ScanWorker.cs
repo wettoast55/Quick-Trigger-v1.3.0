@@ -6,12 +6,12 @@ using System.Drawing.Imaging;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // A status snapshot contains values only; the UI never reads worker-owned controls.
     internal sealed class ScanStatus
     {
-        public string Message = "Starting...";
+        public string Message = "Class is settling in...";
         public bool Matched;
         public bool Error;
         public bool HighResolution;
@@ -85,7 +85,7 @@ namespace QuickTrigger
             if (thread != null)
                 throw new InvalidOperationException("This scan session has already started.");
             thread = new Thread(Run);
-            thread.Name = "Quick Trigger scanner";
+            thread.Name = "Pop Quiz scanner";
             thread.IsBackground = true;
             thread.Start();
         }
@@ -209,7 +209,7 @@ namespace QuickTrigger
                             if (control.WaitingForHold && !wasWaitingForHold)
                             {
                                 Publish(new ScanStatus {
-                                    Message = "Hold " + ActivationKey.Name(settings.HoldKey) + " to scan. Release to pause.",
+                                    Message = "Hold " + ActivationKey.Name(settings.HoldKey) + " for attendance. Release for recess.",
                                     WaitingForHold = true, Triggers = triggers, HighResolution = timer.IsHighResolution
                                 }, null, true);
                                 scanRate = 0;
@@ -232,7 +232,7 @@ namespace QuickTrigger
                         if (overlaps)
                         {
                             control.ResetPresence();
-                            Publish(new ScanStatus { Message = "Move or minimize Quick Trigger; it covers the scan area.", Triggers = triggers }, null);
+                            Publish(new ScanStatus { Message = "Clear the chalkboard: move or minimize Pop Quiz; it covers the scan area.", Triggers = triggers }, null);
                             continue;
                         }
                         if (!SystemInformation.VirtualScreen.Contains(settings.Region))
@@ -318,7 +318,7 @@ namespace QuickTrigger
                             rateWindowStart = now;
                             scansInWindow = 0;
                         }
-                        string message = matched ? "Color matched" : "No color match";
+                        string message = matched ? "Student spotted (color matched)" : "No matching student color";
                         if (blocked != null)
                             message = blocked;
                         if (inputError != null)

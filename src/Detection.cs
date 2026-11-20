@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Globalization;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // One run uses one settings snapshot. Editing the form stops that run.
     internal sealed class ScanSettings

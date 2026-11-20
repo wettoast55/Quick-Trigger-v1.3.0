@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Run as the current user and keep screen coordinates in physical pixels. -->
 <assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
-  <assemblyIdentity version="2.2.0.0" name="QuickTrigger" />
+  <assemblyIdentity version="2.3.1.0" name="PopQuiz" />
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3"><security><requestedPrivileges>
     <requestedExecutionLevel level="asInvoker" uiAccess="false" />
   </requestedPrivileges></security></trustInfo>

@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // Tests use synthetic pixels and timing inputs. They never submit mouse input.
     internal static class SelfTests
@@ -589,7 +589,7 @@ namespace QuickTrigger
                 interval.Value = 1;
                 Check("UI accepts 1 ms for both settings", cooldown.Value == 1 && interval.Value == 1);
                 Check("UI timing fields have no former upper caps", cooldown.Maximum == int.MaxValue && interval.Maximum == int.MaxValue);
-                Check("Main window is named Quick Trigger", form.Text == "Quick Trigger");
+                Check("Main window is named Pop Quiz", form.Text == "Pop Quiz");
                 CheckBox randomDelay = (CheckBox)form.Controls.Find("RandomDelay", true)[0];
                 Check("Random delay starts disabled", !randomDelay.Checked);
                 randomDelay.Checked = true;

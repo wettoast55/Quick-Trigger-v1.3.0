@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // Documented Windows calls live here so the rest of the app reads like ordinary C#.
     internal static class WindowsApi

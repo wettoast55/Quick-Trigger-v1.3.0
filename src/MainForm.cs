@@ -7,7 +7,7 @@ using System.IO;
 using System.Text;
 using System.Windows.Forms;
 
-namespace QuickTrigger
+namespace PopQuiz
 {
     // This form handles controls and display only; ScanWorker owns the capture loop.
     internal sealed class MainForm : Form
@@ -42,7 +42,7 @@ namespace QuickTrigger
         // The 100 ms timer refreshes the interface, never the detector.
         public MainForm()
         {
-            Text = "Quick Trigger";
+            Text = "Pop Quiz";
             Font = new Font("Segoe UI", 9.5f);
             BackColor = Ui.Background;
             ForeColor = Ui.Text;
@@ -77,10 +77,10 @@ namespace QuickTrigger
             header.ColumnCount = 2;
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             header.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 168));
-            Label title = Ui.Label("Quick Trigger", 320, 42);
+            Label title = Ui.Label("Pop Quiz", 320, 42);
             title.Font = new Font("Segoe UI", 25, FontStyle.Bold);
             title.ForeColor = Ui.Text;
-            startButton = Ui.Button("Start   F6", ToggleMonitoring);
+            startButton = Ui.Button("Begin class   F6", ToggleMonitoring);
             startButton.Dock = DockStyle.Fill;
             startButton.Margin = new Padding(0, 6, 0, 12);
             startButton.BackColor = Ui.Accent;
@@ -97,7 +97,7 @@ namespace QuickTrigger
             tabs.SelectedIndexChanged += OnTabChanged;
             root.Controls.Add(tabs, 0, 1);
 
-            messageLabel = Ui.Label("F6 start/stop   |   F7 stop   |   F8 sample color   |   F9 bind window", 740, 30);
+            messageLabel = Ui.Label("F6 class bell   |   F7 stop / recess   |   F8 borrow a color   |   F9 choose classroom", 740, 30);
             messageLabel.Dock = DockStyle.Fill;
             messageLabel.Padding = new Padding(0, 8, 0, 0);
             messageLabel.AutoEllipsis = true;
@@ -107,7 +107,7 @@ namespace QuickTrigger
         // All controls needed for a normal run fit on the first page.
         private TabPage BuildSetupPage()
         {
-            TabPage page = NewPage("Setup");
+            TabPage page = NewPage("Homeroom");
             TableLayoutPanel layout = new TableLayoutPanel();
             layout.Dock = DockStyle.Fill;
             layout.ColumnCount = 2;
@@ -117,10 +117,10 @@ namespace QuickTrigger
 
             FlowLayoutPanel settings = VerticalPanel();
             layout.Controls.Add(settings, 0, 0);
-            settings.Controls.Add(Ui.Label("Display", 302, 22));
+            settings.Controls.Add(Ui.Label("Classroom display", 302, 22));
             displayInput = new ComboBox();
             displayInput.Name = "DisplaySelector";
-            displayInput.AccessibleName = "Display";
+            displayInput.AccessibleName = "Classroom display";
             displayInput.DropDownStyle = ComboBoxStyle.DropDownList;
             displayInput.Width = 302;
             displayInput.DropDownWidth = 440;
@@ -128,8 +128,8 @@ namespace QuickTrigger
             displayInput.SelectedIndexChanged += OnDisplayChanged;
             displayInput.DropDown += OnDisplayDropdown;
             settings.Controls.Add(displayInput);
-            settings.Controls.Add(Ui.Label("Scan area", 302, 22));
-            settings.Controls.Add(Ui.Buttons(Ui.Button("Select area", SelectRegion), Ui.Button("Center", CenterRegion), Ui.Button("Show area", ShowCurrentArea)));
+            settings.Controls.Add(Ui.Label("Chalkboard area", 302, 22));
+            settings.Controls.Add(Ui.Buttons(Ui.Button("Mark board", SelectRegion), Ui.Button("Front row", CenterRegion), Ui.Button("Outline", ShowCurrentArea)));
             regionLabel = Ui.Label("", 302, 30);
             settings.Controls.Add(regionLabel);
 
@@ -138,39 +138,39 @@ namespace QuickTrigger
             colorInput.AccessibleName = "Hex color";
             colorInput.TextChanged += OnSettingsChanged;
             colorInput.Leave += OnColorLeave;
-            colorButton = Ui.Button("Choose", ChooseColor);
+            colorButton = Ui.Button("Pick crayon", ChooseColor);
             colorButton.BackColor = targetColor;
-            settings.Controls.Add(Ui.Pair("Hex color", colorInput, "Color picker", colorButton));
+            settings.Controls.Add(Ui.Pair("House color (hex)", colorInput, "Crayon box", colorButton));
             toleranceInput = Ui.Number("Tolerance", 0, 255, 18);
             toleranceInput.ValueChanged += OnSettingsChanged;
-            settings.Controls.Add(Ui.Pair("Tolerance", toleranceInput, "F8 samples under pointer", new Label()));
+            settings.Controls.Add(Ui.Pair("Grading curve", toleranceInput, "F8: borrow a color", new Label()));
 
             // Only the integer type's natural range remains; 1 ms is valid in both fields.
             cooldownInput = Ui.Number("Cooldown ms", 1, int.MaxValue, 250);
             intervalInput = Ui.Number("Scan interval ms", 1, int.MaxValue, 33);
             cooldownInput.ValueChanged += OnSettingsChanged;
             intervalInput.ValueChanged += OnSettingsChanged;
-            settings.Controls.Add(Ui.Pair("Cooldown (ms)", cooldownInput, "Scan interval (ms)", intervalInput));
+            settings.Controls.Add(Ui.Pair("Recess (ms)", cooldownInput, "Roll call (ms)", intervalInput));
 
             randomDelayInput = new CheckBox();
             randomDelayInput.Name = "RandomDelay";
-            randomDelayInput.AccessibleName = "Random delay (1-50 ms)";
-            randomDelayInput.Text = "Random delay (1-50 ms)";
+            randomDelayInput.AccessibleName = "Thinking time (random 1-50 ms)";
+            randomDelayInput.Text = "Thinking time (random 1-50 ms)";
             randomDelayInput.AutoSize = true;
             randomDelayInput.CheckedChanged += OnSettingsChanged;
             settings.Controls.Add(randomDelayInput);
 
             repeatInput = new CheckBox();
-            repeatInput.Text = "Repeat while color is present";
+            repeatInput.Text = "Extra homework (repeat)";
             repeatInput.AutoSize = true;
             repeatInput.CheckedChanged += OnSettingsChanged;
             settings.Controls.Add(repeatInput);
             clickInput = new CheckBox();
-            clickInput.Text = "Click on trigger";
+            clickInput.Text = "Raise hand (send clicks)";
             clickInput.AutoSize = true;
             clickInput.CheckedChanged += OnClickModeChanged;
             settings.Controls.Add(clickInput);
-            targetLabel = Ui.Label("No window bound. Focus it and press F9.", 302, 40);
+            targetLabel = Ui.Label("No classroom assigned. Focus a test window and press F9.", 302, 40);
             targetLabel.AutoEllipsis = true;
             settings.Controls.Add(targetLabel);
 
@@ -185,7 +185,7 @@ namespace QuickTrigger
             live.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
             live.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             layout.Controls.Add(live, 1, 0);
-            statusLabel = Ui.Label("Paused", 340, 38);
+            statusLabel = Ui.Label("Recess", 340, 38);
             statusLabel.Font = new Font("Segoe UI", 18, FontStyle.Bold);
             statusLabel.ForeColor = Ui.Text;
             statusLabel.AutoEllipsis = true;
@@ -197,60 +197,60 @@ namespace QuickTrigger
             metricsLabel.Padding = new Padding(0, 10, 0, 0);
             holdInput = new CheckBox();
             holdInput.Name = "HoldToScan";
-            holdInput.AccessibleName = "Hold to scan";
-            holdInput.Text = "Hold to scan";
+            holdInput.AccessibleName = "Hall pass (hold)";
+            holdInput.Text = "Hall pass (hold)";
             holdInput.AutoSize = true;
             holdInput.CheckedChanged += OnHoldModeChanged;
             bindingButton = Ui.Button(ActivationKey.Name(holdKey), ChooseHoldButton);
             bindingButton.Name = "HoldBinding";
-            bindingButton.AccessibleName = "Choose hold button";
+            bindingButton.AccessibleName = "Choose hall-pass button";
             bindingButton.Enabled = false;
             live.Controls.Add(statusLabel, 0, 0);
-            live.Controls.Add(Ui.Pair("Activation", holdInput, "Hold button", bindingButton), 0, 1);
+            live.Controls.Add(Ui.Pair("Attendance rule", holdInput, "Hall-pass button", bindingButton), 0, 1);
             live.Controls.Add(preview, 0, 2);
             live.Controls.Add(metricsLabel, 0, 3);
-            live.Controls.Add(Ui.Buttons(Ui.Button("Test scene", OpenDemo), Ui.Button("Export CSV", ExportEvents)), 0, 4);
+            live.Controls.Add(Ui.Buttons(Ui.Button("Practice lab", OpenDemo), Ui.Button("Save grades", ExportEvents)), 0, 4);
             return page;
         }
 
         // Less-used controls remain available without crowding Setup.
         private TabPage BuildAdvancedPage()
         {
-            TabPage page = NewPage("Advanced");
+            TabPage page = NewPage("Extra Credit");
             FlowLayoutPanel fields = VerticalPanel();
             page.Controls.Add(fields);
             leftInput = Ui.Number("Left", -32768, 32767, 0);
             topInput = Ui.Number("Top", -32768, 32767, 0);
             widthInput = Ui.Number("Width", 1, 1024, 120);
             heightInput = Ui.Number("Height", 1, 1024, 120);
-            fields.Controls.Add(Ui.Pair("Left", leftInput, "Top", topInput));
-            fields.Controls.Add(Ui.Pair("Width", widthInput, "Height", heightInput));
+            fields.Controls.Add(Ui.Pair("Desk X (left)", leftInput, "Desk Y (top)", topInput));
+            fields.Controls.Add(Ui.Pair("Board width", widthInput, "Board height", heightInput));
             foreach (NumericUpDown input in new NumericUpDown[] { leftInput, topInput, widthInput, heightInput })
                 input.ValueChanged += OnRegionChanged;
             minimumInput = Ui.Number("Minimum pixels", 1, 1048576, 8);
             stableInput = Ui.Number("Stable frames", 1, int.MaxValue, 2);
             minimumInput.ValueChanged += OnSettingsChanged;
             stableInput.ValueChanged += OnSettingsChanged;
-            fields.Controls.Add(Ui.Pair("Minimum pixels", minimumInput, "Stable frames", stableInput));
-            fields.Controls.Add(Ui.Label("Coordinates are physical desktop pixels and must stay on the chosen display. The green outline lasts three seconds after adjustments.\n\nStable frames means consecutive matching scans. Repeat mode fires again after the cooldown.\n\n1 ms is a requested interval. Capture, display refresh and Windows scheduling determine the actual rate. Changing settings pauses monitoring.", 630, 180));
+            fields.Controls.Add(Ui.Pair("Passing pixels", minimumInput, "Proofreads (frames)", stableInput));
+            fields.Controls.Add(Ui.Label("Classroom rules: keep the chalkboard inside your chosen display. Coordinates use physical desktop pixels; the green outline lasts three seconds.\n\nPassing pixels sets the minimum matching count. Proofreads requires consecutive matching scans. Extra homework repeats after recess.\n\nWindows does not promise punctual attendance: 1 ms is a requested interval. Changing a setting sends the class to recess.", 630, 180));
             return page;
         }
 
         // The event list is rebuilt only while this page is visible.
         private TabPage BuildEventsPage()
         {
-            TabPage page = NewPage("Events");
+            TabPage page = NewPage("Report Card");
             eventList = new ListView();
             eventList.Dock = DockStyle.Fill;
             eventList.View = View.Details;
             eventList.FullRowSelect = true;
-            eventList.Columns.Add("Time", 130);
-            eventList.Columns.Add("Event", 120);
+            eventList.Columns.Add("Bell time", 130);
+            eventList.Columns.Add("Class activity", 120);
             eventList.Columns.Add("Pixels", 90);
             eventList.Columns.Add("Presence (ms)", 130);
-            eventList.Columns.Add("Delay (ms)", 100);
-            eventList.Columns.Add("Waited (ms)", 110);
-            eventCountLabel = Ui.Label("Latest 100 shown; latest 10,000 retained for export.", 700, 30);
+            eventList.Columns.Add("Think (ms)", 100);
+            eventList.Columns.Add("Actual (ms)", 110);
+            eventCountLabel = Ui.Label("Grade book: latest 100 shown; latest 10,000 retained for CSV.", 700, 30);
             eventCountLabel.Dock = DockStyle.Bottom;
             page.Controls.Add(eventList);
             page.Controls.Add(eventCountLabel);
@@ -344,7 +344,7 @@ namespace QuickTrigger
             {
                 targetWindow = IntPtr.Zero;
                 targetProcess = 0;
-                targetLabel.Text = "Focus a window on this display and press F9.";
+                targetLabel.Text = "Assign a classroom: focus a window on this display and press F9.";
             }
             SetRegion(DisplayLayout.Centered(SelectedDisplay.Bounds, (int)widthInput.Value, (int)heightInput.Value));
         }
@@ -451,9 +451,9 @@ namespace QuickTrigger
             StopMonitoring();
             bindingButton.Enabled = holdInput.Checked;
             if (holdInput.Checked)
-                ShowMessage("Press F6 to arm, then hold " + ActivationKey.Name(holdKey) + " to scan.", false);
+                ShowMessage("Take roll with F6, then hold " + ActivationKey.Name(holdKey) + " for attendance.", false);
             else
-                ShowMessage("Hold mode off. F6 starts continuous monitoring.", false);
+                ShowMessage("Hall pass off. F6 begins continuous attendance.", false);
         }
 
         // Rebinding always stops the session and keeps the old binding if cancelled.
@@ -470,7 +470,7 @@ namespace QuickTrigger
                     {
                         holdKey = dialog.SelectedKey;
                         bindingButton.Text = ActivationKey.Name(holdKey);
-                        ShowMessage("Press F6 to arm, then hold " + ActivationKey.Name(holdKey) + " to scan.", false);
+                        ShowMessage("Take roll with F6, then hold " + ActivationKey.Name(holdKey) + " for attendance.", false);
                     }
                 }
                 finally
@@ -498,7 +498,7 @@ namespace QuickTrigger
             if (clickInput.Checked && !hotkeys.Contains(7))
             {
                 clickInput.Checked = false;
-                ShowMessage("F7 is unavailable. Close the app using that hotkey, then restart Quick Trigger.", true);
+                ShowMessage("F7 is unavailable. Close the app using that hotkey, then restart Pop Quiz.", true);
             }
         }
 
@@ -556,7 +556,7 @@ namespace QuickTrigger
                     colorInput.Text = PixelDetector.ToHex(pixel.GetPixel(0, 0));
                     ReadColor();
                 }
-                ShowMessage("Color sampled. F6 starts monitoring.", false);
+                ShowMessage("Crayon borrowed. F6 begins class.", false);
             }
             catch (Exception error)
             {
@@ -614,7 +614,7 @@ namespace QuickTrigger
             BindWindow(window);
             followDemo = demo != null && !demo.IsDisposed && window == demo.Handle;
             SetRegion(CenteredRegion(WindowsApi.ClientBounds(window), (int)widthInput.Value, (int)heightInput.Value));
-            ShowMessage("Window bound. F6 starts monitoring.", false);
+            ShowMessage("Classroom assigned. F6 begins class.", false);
         }
 
         // Saving the process ID also protects against Windows reusing a closed handle.
@@ -623,7 +623,7 @@ namespace QuickTrigger
             SelectDisplayForWindow(window);
             targetWindow = window;
             WindowsApi.GetWindowThreadProcessId(window, out targetProcess);
-            targetLabel.Text = "Bound: " + WindowsApi.WindowTitle(window);
+            targetLabel.Text = "Classroom: " + WindowsApi.WindowTitle(window);
         }
 
         // Open a self-contained scene so detection can be checked without another game.
@@ -648,7 +648,7 @@ namespace QuickTrigger
             followDemo = true;
             BindWindow(demo.Handle);
             SetRegion(demo.ScanRegion);
-            ShowMessage("F6 starts. In the scene: Space pauses motion, T hides the target, D adds a decoy.", false);
+            ShowMessage("Practice lab: F6 begins class. Space freezes the student; T hides them; D adds a decoy.", false);
         }
 
         // Moving the scene updates the area and pauses the run to avoid stale coordinates.
@@ -670,7 +670,7 @@ namespace QuickTrigger
             StopMonitoring();
             followDemo = false;
             targetWindow = IntPtr.Zero;
-            targetLabel.Text = "No window bound. Focus it and press F9.";
+            targetLabel.Text = "No classroom assigned. Focus a test window and press F9.";
         }
 
         // Starting freezes the inputs into a snapshot; stopping cancels any timer wait.
@@ -693,9 +693,9 @@ namespace QuickTrigger
             if (error == null && !SystemInformation.VirtualScreen.Contains(settings.Region))
                 error = "The scan area must be inside the current desktop.";
             if (error == null && !DisplayChoice.StillConnected(settings.DisplayDeviceName, settings.DisplayBounds))
-                error = "The selected display changed. Select it again from the Display menu.";
+                error = "The classroom display changed. Select it again under Classroom display.";
             if (error == null && settings.SendClicks && (!hotkeys.Contains(7) || !WindowsApi.IsWindow(targetWindow)))
-                error = "Click mode needs F7 available and a window bound with F9.";
+                error = "Raise hand needs F7 available and a classroom window assigned with F9.";
             if (error != null)
             {
                 ShowMessage(error, true);
@@ -709,8 +709,8 @@ namespace QuickTrigger
             }
             worker = new ScanWorker(settings);
             monitoring = true;
-            startButton.Text = settings.HoldToScan ? "Disarm   F6" : "Stop   F6";
-            statusLabel.Text = settings.HoldToScan ? "Waiting for hold" : (settings.SendClicks ? "Click mode" : "Detection only");
+                startButton.Text = "Dismiss   F6";
+            statusLabel.Text = settings.HoldToScan ? "Hall pass needed" : (settings.SendClicks ? "Hands up (clicks)" : "Taking attendance");
             worker.Start();
         }
 
@@ -722,8 +722,8 @@ namespace QuickTrigger
                 worker.RequestStop();
             if (startButton == null || statusLabel == null)
                 return;
-            startButton.Text = holdInput != null && holdInput.Checked ? "Arm   F6" : "Start   F6";
-            statusLabel.Text = "Paused";
+            startButton.Text = holdInput != null && holdInput.Checked ? "Take roll   F6" : "Begin class   F6";
+            statusLabel.Text = "Recess";
         }
 
         // Update the preview and metrics at ten Hz; scanning is independent of this timer.
@@ -740,8 +740,8 @@ namespace QuickTrigger
                 worker.Dispose();
                 worker = null;
                 monitoring = false;
-                startButton.Text = holdInput.Checked ? "Arm   F6" : "Start   F6";
-                statusLabel.Text = finalUpdate.Status.Error ? "Stopped: error" : "Paused";
+                startButton.Text = holdInput.Checked ? "Take roll   F6" : "Begin class   F6";
+                statusLabel.Text = finalUpdate.Status.Error ? "Class cancelled" : "Recess";
             }
         }
 
@@ -766,12 +766,12 @@ namespace QuickTrigger
                 status.HighResolution ? "high resolution" : "standard");
             if (monitoring)
             {
-                statusLabel.Text = status.WaitingForHold ? "Waiting for hold" : (status.Matched ? "Color matched" : "Monitoring");
+                statusLabel.Text = status.WaitingForHold ? "Hall pass needed" : (status.Matched ? "Student spotted" : "Taking attendance");
                 ShowMessage(status.Message, status.Error);
             }
             if (status.Error)
                 ShowMessage(status.Message, true);
-            eventCountLabel.Text = events.Count + " events retained; latest 100 shown. Pending events dropped: " + update.DroppedEvents;
+            eventCountLabel.Text = events.Count + " class records; latest 100 shown. Pending records dropped: " + update.DroppedEvents;
             if (tabs.SelectedIndex == 2 && eventsChanged)
                 RefreshEventList();
         }
@@ -811,13 +811,13 @@ namespace QuickTrigger
                 ConsumeUpdate(worker.ReadUpdate());
             if (events.Count == 0)
             {
-                ShowMessage("No trigger events to export yet.", false);
+                ShowMessage("The grade book is empty. Let class run first.", false);
                 return;
             }
             using (SaveFileDialog dialog = new SaveFileDialog())
             {
                 dialog.Filter = "CSV files (*.csv)|*.csv";
-                dialog.FileName = "QuickTrigger-events-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".csv";
+                dialog.FileName = "PopQuiz-report-card-" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".csv";
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                     return;
                 try
@@ -828,7 +828,7 @@ namespace QuickTrigger
                         foreach (TriggerEvent entry in events)
                             writer.WriteLine(entry.ToCsv());
                     }
-                    ShowMessage("Exported " + events.Count + " events.", false);
+                    ShowMessage("Report card saved: " + events.Count + " class records.", false);
                 }
                 catch (Exception error)
                 {
@@ -873,7 +873,7 @@ namespace QuickTrigger
                 switch (message.WParam.ToInt32())
                 {
                     case 6: ToggleMonitoring(this, EventArgs.Empty); break;
-                    case 7: StopMonitoring(); CloseAreaOverlay(); ShowMessage("Stopped by F7.", false); break;
+                    case 7: StopMonitoring(); CloseAreaOverlay(); ShowMessage("Recess! F7 stopped monitoring.", false); break;
                     case 8: SampleColor(); break;
                     case 9: BindActiveWindow(); break;
                 }
